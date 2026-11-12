@@ -26,8 +26,17 @@ pub fn android_main(app: AndroidApp) {
     write_status("native_entry_started", "NativeActivity chamou android_main.");
 
     let home = data_dir.join("horizon-home");
+    let game_dir = data_dir.join("horizon-game");
     let player_dir = data_dir.join("horizon-player");
     let resources = data_dir.join(".local").join("horizon-client").join("26.3");
+    for directory in [&home, &game_dir, &player_dir, &resources] {
+        if let Err(error) = std::fs::create_dir_all(directory) {
+            write_status("storage_setup_failed", &format!(
+                "Não foi possível preparar {}: {error}", directory.display()
+            ));
+            return;
+        }
+    }
     let resource_manifest = resources.join("horizon-resources.json");
     let prepare_manifest = resources.join("horizon-prepare.json");
     let resources_ready = [&resource_manifest, &prepare_manifest]
@@ -48,6 +57,7 @@ pub fn android_main(app: AndroidApp) {
 
     let mut args = vec![
         "--home".to_owned(), home.to_string_lossy().into_owned(),
+        "--game-dir".to_owned(), game_dir.to_string_lossy().into_owned(),
         "--player-dir".to_owned(), player_dir.to_string_lossy().into_owned(),
         "--resources".to_owned(), resources.to_string_lossy().into_owned(),
     ];
