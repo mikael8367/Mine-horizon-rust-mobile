@@ -322,7 +322,7 @@ pub fn join_server(session: &AuthSession, server_hash: &str) -> Result<(), JoinE
 
 fn join_server_once(session: &AuthSession, server_hash: &str) -> Result<(), JoinError> {
     if session.provider == AuthProvider::ElyBy {
-        const ELY_BY_JOIN: &str = "https://sessionserver.ely.by/session/minecraft/join";
+        const ELY_BY_JOIN: &str = "https://authserver.ely.by/session/join";
         return match agent()
             .post(ELY_BY_JOIN)
             .set("Content-Type", "application/json; charset=utf-8")
