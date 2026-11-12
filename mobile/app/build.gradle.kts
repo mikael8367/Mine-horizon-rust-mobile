@@ -4,6 +4,8 @@ plugins {
 }
 
 android {
+    sourceSets["main"].jniLibs.srcDirs("src/main/jniLibs")
+
     namespace = "dev.playhorizon.mobile"
     compileSdk = 35
 
