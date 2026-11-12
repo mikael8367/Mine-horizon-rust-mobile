@@ -3,6 +3,22 @@
 //! an unclean last exit, a fullscreen the window system could not show.
 use super::*;
 
+/// Persist Android startup milestones so the launcher can report where startup stopped.
+fn android_startup_status(stage: &str, detail: &str) {
+    #[cfg(target_os = "android")]
+    {
+        let Ok(directory) = std::env::current_dir() else { return };
+        let path = directory.join("horizon-startup-status.txt");
+        let temporary = directory.join("horizon-startup-status.txt.part");
+        let contents = format!("{stage}\\n{detail}\\n");
+        if std::fs::write(&temporary, contents).is_ok() {
+            let _ = std::fs::rename(temporary, path);
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = (stage, detail);
+}
+
 /// The window system ended the event loop with a failure (on Linux, a compositor dropping the
 /// connection after a protocol error) while fullscreen was on: the next start opens windowed, so a
 /// fullscreen the system can't show doesn't crash every launch (#2904).
@@ -29,7 +45,18 @@ pub(super) fn run_event_loop(mut game: Game<'_>) -> Result<()> {
         return game.error.take().map_or(Ok(()), Err);
     }
     let mut split = split::Split::new(game);
-    let result = horizon_client::create_event_loop()?.run_app(&mut split);
+    let event_loop = match horizon_client::create_event_loop() {
+        Ok(event_loop) => event_loop,
+        Err(error) => {
+            android_startup_status("event_loop_failed", &error.to_string());
+            return Err(error.into());
+        }
+    };
+    android_startup_status("event_loop_ready", "Event loop do winit criado.");
+    let result = event_loop.run_app(&mut split);
+    if let Err(error) = &result {
+        android_startup_status("event_loop_failed", &error.to_string());
+    }
     game = split.host;
     narrator::stop();
     leave_fullscreen_after(&result, &mut game.settings);
@@ -113,11 +140,13 @@ impl Loading {
         ) {
             Ok(w) => Arc::new(w),
             Err(e) => {
+                android_startup_status("window_create_failed", &e.to_string());
                 self.error = Some(e.into());
                 event_loop.exit();
                 return;
             }
         };
+        android_startup_status("window_created", "Janela nativa do Horizon criada.");
         horizon_client::window::settle_created_fullscreen(&window, fullscreen);
         #[cfg(target_os = "windows")]
         if let Some(hwnd) = hwnd(&window) {
@@ -160,8 +189,12 @@ impl Loading {
             None,
             self.settings.horizon.api,
         ) {
-            Ok(r) => self.renderer = Some(r),
+            Ok(r) => {
+                self.renderer = Some(r);
+                android_startup_status("boot_renderer_ready", "Renderer inicializado e associado à janela.");
+            }
             Err(e) => {
+                android_startup_status("renderer_boot_failed", &e.to_string());
                 #[cfg(target_os = "windows")]
                 if let Some(stop) = &boot_paint_stop {
                     stop.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -281,6 +314,7 @@ impl Loading {
             match renderer.render(&frame) {
                 Ok(true) if self.gui.is_some() && self.menu.pending.is_none() => {
                     self.title_drawn = true;
+                    android_startup_status("first_frame_presented", "A primeira tela do Horizon foi renderizada e apresentada.");
                     self.menu.perf.title_shown()
                 }
                 Ok(_) => {}
@@ -455,6 +489,7 @@ impl ApplicationHandler for App {
             Step::Ready(game) => *self = App::Ready(game),
             Step::Done => event_loop.exit(),
             Step::Failed(e) => {
+                android_startup_status("resource_loading_failed", &e.to_string());
                 if let App::Loading(loading) = self {
                     loading.error = Some(e);
                 }
