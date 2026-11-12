@@ -16,6 +16,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import dev.playhorizon.mobile.download.MinecraftDataInstaller
 import dev.playhorizon.mobile.download.MojangDownloadPlan
+import dev.playhorizon.mobile.download.VanillaResourcePreparer
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -32,6 +33,7 @@ class MainActivity : Activity() {
     private var progressBar: ProgressBar? = null
     private var statusText: TextView? = null
     private var cancelButton: Button? = null
+    private var prepareButton: Button? = null
     private var downloadTask: Future<*>? = null
     private var workerBusy = false
     private var nativeEngineOpened = false
@@ -93,6 +95,13 @@ class MainActivity : Activity() {
         downloadButton = downloadAction
         content.addView(downloadAction)
 
+        val prepareAction = Button(this).apply {
+            text = "Preparar recursos vanilla"
+            setOnClickListener { startVanillaPreparation() }
+        }
+        prepareButton = prepareAction
+        content.addView(prepareAction)
+
         content.addView(Button(this).apply {
             text = "Abrir motor Rust em tela cheia"
             setOnClickListener {
@@ -101,12 +110,14 @@ class MainActivity : Activity() {
                     statusText?.text = "Biblioteca ARM64 ainda não foi incluída. Aguarde a compilação do CI."
                     return@setOnClickListener
                 }
-                val preparedManifest = File(filesDir, ".local/horizon-client/26.3/horizon-resources.json")
-                statusText?.text = if (preparedManifest.isFile) {
-                    "Recursos preparados encontrados. Abrindo o motor Rust ARM64..."
-                } else {
-                    "Motor Rust ARM64 encontrado. Os arquivos oficiais baixados ainda precisam ser preparados; abrindo a tela de diagnóstico do motor."
+                val preparedDir = File(filesDir, ".local/horizon-client/26.3")
+                val preparedManifest = File(preparedDir, "horizon-resources.json")
+                val preparedStamp = File(preparedDir, "horizon-prepare.json")
+                if (!preparedManifest.isFile || !preparedStamp.isFile) {
+                    statusText?.text = "Os recursos vanilla ainda não foram preparados e validados. Use o botão Preparar recursos vanilla."
+                    return@setOnClickListener
                 }
+                statusText?.text = "Recursos vanilla validados. Abrindo o motor Rust ARM64..."
                 try {
                     nativeEngineOpened = true
                     startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
@@ -153,7 +164,7 @@ class MainActivity : Activity() {
             setTextColor(0xFFE8F5E9.toInt())
         })
         content.addView(TextView(this).apply {
-            text = "O motor Rust ARM64 e a integração NativeActivity já são compilados e empacotados pelo CI. O jogo não usa JRE de PC. Ainda falta preparar os recursos vanilla exigidos pelo Horizon e validar a renderização em um aparelho Android real."
+            text = "A preparação usa o OpenJDK 25 ARM64 e o preparador Rust do Horizon. Os arquivos oficiais são verificados antes da preparação. O jogo ainda precisa de autenticação/licença Java Edition e validação de renderização em aparelho real."
             textSize = 14f
             setTextColor(0xFFFFD180.toInt())
             setPadding(0, dp(8), 0, dp(12))
@@ -224,6 +235,55 @@ class MainActivity : Activity() {
                     cancelButton?.visibility = View.GONE
                     downloadButton?.isEnabled = true
                     downloadButton?.text = "Baixar arquivos do Minecraft"
+                }
+            }
+        }
+    }
+
+    private fun startVanillaPreparation() {
+        if (workerBusy) return
+        workerBusy = true
+        downloadButton?.isEnabled = false
+        prepareButton?.isEnabled = false
+        prepareButton?.text = "Preparando recursos..."
+        cancelButton?.visibility = View.VISIBLE
+        progressBar?.progress = 0
+        statusText?.text = "Iniciando preparação vanilla..."
+
+        downloadTask = worker.submit {
+            try {
+                val destination = VanillaResourcePreparer(this).prepare(
+                    isCancelled = { Thread.currentThread().isInterrupted },
+                ) { progress ->
+                    runOnUiThread {
+                        progress.fraction?.let {
+                            progressBar?.progress = (it.coerceIn(0.0, 1.0) * 1000).toInt()
+                        }
+                        statusText?.text = progress.message
+                    }
+                }
+                runOnUiThread {
+                    progressBar?.progress = 1000
+                    statusText?.text = "Recursos vanilla preparados e validados!\nLocal: " + destination.absolutePath
+                    prepareButton?.text = "Recursos vanilla preparados"
+                }
+            } catch (error: Throwable) {
+                val cancelled = error is CancellationException || Thread.currentThread().isInterrupted
+                runOnUiThread {
+                    statusText?.text = if (cancelled) {
+                        "Preparação cancelada. Execute novamente para continuar."
+                    } else {
+                        "Falha na preparação vanilla: " + (error.message ?: error.javaClass.simpleName)
+                    }
+                    prepareButton?.text = "Tentar preparar novamente"
+                }
+            } finally {
+                runOnUiThread {
+                    workerBusy = false
+                    downloadTask = null
+                    cancelButton?.visibility = View.GONE
+                    downloadButton?.isEnabled = true
+                    prepareButton?.isEnabled = true
                 }
             }
         }
