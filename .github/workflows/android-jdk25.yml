@@ -1,6 +1,10 @@
 name: Build Android Java 25 JDK
 
 on:
+  push:
+    branches: [mobile/android-port]
+    paths:
+      - ".github/workflows/android-jdk25.yml"
   workflow_dispatch:
 
 permissions:
