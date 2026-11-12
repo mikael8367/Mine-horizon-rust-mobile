@@ -72,27 +72,30 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(12))
         })
 
-        downloadButton = Button(this).apply {
+        val downloadAction = Button(this).apply {
             text = "Baixar arquivos do Minecraft"
             setOnClickListener { startMinecraftDownload() }
         }
-        content.addView(downloadButton)
+        downloadButton = downloadAction
+        content.addView(downloadAction)
 
-        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+        val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000
             progress = 0
         }
-        content.addView(progressBar, LinearLayout.LayoutParams(
+        progressBar = progress
+        content.addView(progress, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(12)
         ).apply { topMargin = dp(12) })
 
-        statusText = TextView(this).apply {
+        val status = TextView(this).apply {
             text = "Pronto para verificar os arquivos oficiais da versão 26.3."
             textSize = 14f
             setTextColor(0xFFE0E0E0.toInt())
             setPadding(0, dp(10), 0, dp(16))
         }
-        content.addView(statusText)
+        statusText = status
+        content.addView(status)
 
         content.addView(TextView(this).apply {
             text = "RUNTIME NATIVO ARM64"
