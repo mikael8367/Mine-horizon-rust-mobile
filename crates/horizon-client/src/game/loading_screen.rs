@@ -418,6 +418,10 @@ impl Loading {
         self.menu.handoff(&mut game);
         game.apply_settings();
         game.previous = Instant::now();
+        android_startup_status(
+            "game_client_ready",
+            "Recursos do jogo carregados, renderer principal criado e menu entregue ao loop de jogo.",
+        );
         // Minecraft.onGameLoadFinished: a start that made it this far is clean.
         game.settings.file.set(
             "startedCleanly",
