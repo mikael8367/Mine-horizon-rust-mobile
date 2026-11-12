@@ -17,7 +17,7 @@ pub fn android_main(app: AndroidApp) {
     let _ = std::env::set_current_dir(&data_dir);
     let startup_status = data_dir.join("horizon-startup-status.txt");
     let write_status = |stage: &str, detail: &str| {
-        let body = format!("{stage}\\n{detail}\\n");
+        let body = format!("{stage}\n{detail}\n");
         let temp = data_dir.join("horizon-startup-status.txt.part");
         if std::fs::write(&temp, body).is_ok() {
             let _ = std::fs::rename(&temp, &startup_status);
@@ -30,12 +30,11 @@ pub fn android_main(app: AndroidApp) {
     let resources = data_dir.join(".local").join("horizon-client").join("26.3");
     let resource_manifest = resources.join("horizon-resources.json");
     let prepare_manifest = resources.join("horizon-prepare.json");
-    let resources_ready = [(&resource_manifest, "horizon-resources.json"),
-        (&prepare_manifest, "horizon-prepare.json")]
+    let resources_ready = [&resource_manifest, &prepare_manifest]
         .into_iter()
-        .all(|(path, name)| {
-            std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() > 2)
-                && name.ends_with(".json")
+        .all(|path| {
+            std::fs::metadata(path)
+                .is_ok_and(|metadata| metadata.is_file() && metadata.len() > 2)
         });
     if !resources_ready {
         write_status(
