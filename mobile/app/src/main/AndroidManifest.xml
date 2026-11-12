@@ -23,7 +23,6 @@
             android:exported="false"
             android:screenOrientation="landscape">
             <meta-data android:name="android.app.lib_name" android:value="horizon_android" />
-            <meta-data android:name="android.app.func_name" android:value="android_main" />
         </activity>
     </application>
 </manifest>
