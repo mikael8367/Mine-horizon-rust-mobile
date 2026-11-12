@@ -27,6 +27,7 @@ class VerifiedDownloader(
         destination: File,
         algorithm: String,
         expectedDigest: String,
+        expectedSize: Long? = null,
         onProgress: (Progress) -> Unit = {},
     ): File {
         val normalizedAlgorithm = algorithm.uppercase()
@@ -104,6 +105,11 @@ class VerifiedDownloader(
                 }
             }
 
+            if (expectedSize != null) {
+                require(part.length() == expectedSize) {
+                    "Size mismatch: expected $expectedSize bytes, got ${part.length()}"
+                }
+            }
             val digest = MessageDigest.getInstance(normalizedAlgorithm.replace("-", ""))
             DigestInputStream(part.inputStream().buffered(), digest).use { stream ->
                 val buffer = ByteArray(64 * 1024)
