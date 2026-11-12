@@ -5,6 +5,12 @@ on:
     branches: [mobile/android-port]
     paths:
       - "mobile/**"
+      - "crates/horizon-android/**"
+      - "crates/horizon-client/**"
+      - "crates/horizon-client-lib/**"
+      - "crates/horizon-client-render/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/android-shell.yml"
   pull_request:
     paths:
@@ -21,6 +27,26 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "ndk;27.2.12479018"
+      - name: Configure Android ARM64 linker
+        shell: bash
+        run: |
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" >> "$GITHUB_ENV"
+      - name: Build Horizon Rust renderer for Android ARM64
+        run: cargo build --release --target aarch64-linux-android -p horizon-android
+      - name: Stage native renderer for Android packaging
+        shell: bash
+        run: |
+          mkdir -p mobile/app/src/main/jniLibs/arm64-v8a
+          cp target/aarch64-linux-android/release/libhorizon_android.so mobile/app/src/main/jniLibs/arm64-v8a/
+          file mobile/app/src/main/jniLibs/arm64-v8a/libhorizon_android.so
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
