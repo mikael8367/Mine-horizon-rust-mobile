@@ -16,9 +16,12 @@ callbacks. Existing files are re-hashed before being reused. Files are stored in
 the app-private `files/minecraft/26.3` directory. No Mojang game files are stored
 in this repository or in CI.
 
-This is a verified file-download stage, not yet a prepared or playable game.
-Microsoft sign-in and Java Edition entitlement validation must be integrated
-before preparation/Play can be enabled. The app currently has no Play action.
+The download stage is separate from resource preparation. The launcher also
+provides offline and Ely.by account modes and a native-engine launch action.
+Offline mode supports local single-player and servers that accept offline
+authentication; it does not bypass online-mode authentication. Microsoft
+device-code sign-in and Java Edition entitlement validation remain optional
+work for Microsoft-authenticated servers.
 
 ## Runtime and preparation
 
@@ -53,8 +56,8 @@ device; the first on-device run remains required to validate this.
 
 - Android app shell is landscape-first and uses immersive mode.
 - The launcher UI remains in `MainActivity`; the native Rust engine opens as a separate fullscreen `NativeActivity` on top of it. Finishing the native activity (Android Back) returns to the launcher instead of replacing its screen.
-- The fullscreen action now refuses to open the engine until both Horizon preparation manifests exist. The “Baixar e preparar recursos vanilla” action automatically downloads/verifies all official Minecraft 26.3 inputs, installs the Android Java 25 toolchain, executes the Rust preparer, and validates its output with `--check`.
-- NativeActivity now checks that both prepared manifests exist and are non-empty before entering the engine. The Rust startup writes diagnostic milestones for event-loop creation, native window creation, renderer initialization, resource-loading errors, and the first successfully presented title frame. When returning to the launcher, it displays the last confirmed milestone; this is diagnostic instrumentation, not proof of successful gameplay.
+- The launcher opens NativeActivity only after both Horizon preparation manifests exist and are non-empty. The “Baixar e preparar recursos vanilla” action downloads/verifies all official Minecraft 26.3 inputs, installs the Android Java 25 toolchain, executes the Rust preparer, and validates its output with `--check`.
+- NativeActivity validates both prepared manifests, creates separate app-private folders for engine logs, game saves and player settings, and passes explicit `--home`, `--game-dir`, `--player-dir`, and `--resources` paths. The Rust startup reports event-loop creation, native window creation, renderer initialization, resource-loading errors, the first presented title frame, and successful handoff to the actual game client. The launcher displays the last confirmed milestone on return.
 - The window and renderer are created by Horizon's existing winit/wgpu loading-screen path. Android-device validation is still required to confirm the PowerVR driver can create the surface and present frames.
 - `MojangDownloadPlan.kt` resolves the pinned 26.3 version JSON, checks its
   accepted SHA-1, checks the pinned client/server jars and accepted asset index,
@@ -80,26 +83,28 @@ device; the first on-device run remains required to validate this.
 - Android CI cross-builds the ARM64 native library, verifies its ELF64/AArch64 architecture, inspects its ELF `DT_NEEDED` entries, rejects unaccounted shared-library dependencies, and stages the engine plus any required `libc++_shared.so` from the matching NDK. It then checks that Gradle merges every ARM64 shared library byte-for-byte. These are the native runtime libraries the Rust engine actually links against; Android platform libraries (for example `libandroid.so`, `liblog.so`, and the GPU driver libraries) are supplied by Android and must not be copied from a desktop Linux distribution.
 - The Minecraft download plan installs the pinned version JSON, client/server jars, Maven library artifacts, the asset index, and every content-addressed asset object. These Java/Maven libraries are preparation inputs and game data; they are not a Java gameplay runtime. Horizon gameplay is the Rust ARM64 native library, while the full OpenJDK 25 ARM64 archive is used only by `horizon-prepare`. Native Java desktop classifiers (Windows/macOS/Linux) are not valid Android runtime libraries and must not be loaded into the Android process.
 - Gradle explicitly limits this app build to `arm64-v8a` and enables legacy JNI-library packaging so Android extracts `libhorizon_android.so` into `nativeLibraryDir`, matching the launcher's library-presence check and `NativeActivity` loading path.
-- Added a `horizon-android` NativeActivity entry point and passed AndroidApp into winit's event-loop builder. The Android entry now passes explicit app-private `--home`, `--player-dir`, and `--resources` paths to the game, preventing it from resolving desktop-relative folders. CI builds the ARM64 `.so` and verifies Gradle packaging; actual surface creation and frame presentation still require a real-device test.
-- Microsoft device-code sign-in/entitlement, Java-25-compatible resource preparation (or a verified native replacement), SAF folder selection, and real-device gameplay validation remain incomplete.
+- Added a `horizon-android` NativeActivity entry point and passed AndroidApp into winit's event-loop builder. CI builds the ARM64 `.so` and verifies Gradle packaging; actual surface creation and frame presentation still require a real-device test.
+- The touch-control engine exists in `horizon-client-render/src/touch.rs`, but it is not yet connected to the game's Android touch events and HUD; on-screen joystick, jump, attack, and look controls remain incomplete.
+- Android audio output is not yet wired into the Rust audio backend. Keyboard/controller support and real-device GPU/input/lifecycle validation remain to be tested.
+- Ely.by direct authentication is implemented in the launcher/native session path but still needs an end-to-end server test. Microsoft device-code sign-in/entitlement is optional and remains incomplete.
+- SAF folder selection is not implemented; current game data and saves remain in app-private storage.
 - Never create an APK unless the maintainer explicitly requests one.
 
 ## Remaining integration sequence
 
-1. Add Microsoft device-code sign-in and Minecraft: Java Edition entitlement validation.
-2. Run `.github/workflows/android-jdk25.yml` once and confirm that the
-   Android ARM64 full JDK release assets are published.
-3. Run the Android shell CI and resolve any native preparer or Kotlin/Gradle
-   compilation errors.
-4. Test the combined download-and-preparation action on a real Android ARM64
-   device, including Mojang downloads, process execution permissions, Java 25
-   startup, exporter compilation/execution, cancellation, resume/retry, and the
-   final `--check`.
-5. Launch NativeActivity on a real Android device and verify the event loop,
-   window creation, wgpu renderer initialization, and first presented title
-   frame. Then test opening a world separately; a title frame alone is not
-   gameplay validation.
-5. Add Microsoft device-code sign-in and Minecraft: Java Edition entitlement
-   validation; do not enable gameplay without it.
-6. Test NativeActivity + winit + wgpu surface creation, touch input, lifecycle,
-   audio, and performance on a real Android device; then add SAF folder selection.
+1. Run `.github/workflows/android-jdk25.yml` and confirm that the Android ARM64
+   JDK release assets are published; then test Java/Javac execution on Android.
+2. Complete the Android shell CI and resolve any Kotlin, Gradle, Rust or native
+   packaging errors.
+3. Test Mojang downloads and full resource preparation on the phone, including
+   process permissions, cancellation, resume/retry and the final `--check`.
+4. On a real Android ARM64 device, confirm NativeActivity, Winit, WGPU surface
+   creation, the title frame and the `game_client_ready` handoff.
+5. Connect the existing touch-control module to Winit touch events, HUD drawing
+   and gameplay input; test multitouch, movement, camera, attack and inventory.
+6. Test creating, saving, reopening and entering a single-player world, then
+   validate lifecycle, Android Back, focus changes, memory use and performance.
+7. Wire Android audio output and test sound. Add SAF storage only if external
+   world-folder import/export is required.
+8. Test Ely.by end-to-end against a compatible server. Add Microsoft device-code
+   login and entitlement validation only for Microsoft online-mode servers.
