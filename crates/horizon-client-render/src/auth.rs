@@ -806,7 +806,11 @@ mod tests {
         );
         assert!(AuthSession::parse(r#"{"name":"A","uuid":"nope","access_token":"t"}"#).is_err());
         assert!(AuthSession::parse(r#"{"name":"A","uuid":"069a79f444e94726a5befca90e38aaf5","access_token":"t","user_type":"legacy"}"#).is_err());
+        let ely = AuthSession::parse(r#"{"name":"Player","uuid":"069a79f444e94726a5befca90e38aaf5","access_token":"ely-token","user_type":"ely.by"}"#).unwrap();
+        assert_eq!(ely.provider, AuthProvider::ElyBy);
+        assert_eq!(ely.access_token(), "ely-token");
         let s = AuthSession::parse(r#"{"name":"A","uuid":"069a79f444e94726a5befca90e38aaf5","access_token":"t","xuid":"25"}"#).unwrap();
+        assert_eq!(s.provider, AuthProvider::Microsoft);
         assert_eq!(s.xuid.as_deref(), Some("25"));
     }
 
