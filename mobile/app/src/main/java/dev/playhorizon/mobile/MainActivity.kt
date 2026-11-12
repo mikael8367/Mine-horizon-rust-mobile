@@ -70,8 +70,8 @@ class MainActivity : Activity() {
             val detail = lines.drop(1).joinToString(" ").trim()
             statusText?.text = when (stage) {
                 "game_client_ready" ->
-                    "SUCESSO: o motor carregou os recursos, criou o renderer principal e chegou ao menu do jogo.\\n" +
-                        "Ainda falta validar a entrada em um mundo e os controles no aparelho.\\n$detail"
+                    "SUCESSO: o motor carregou os recursos, criou o renderer principal e chegou ao menu do jogo.\n" +
+                        "Ainda falta validar a entrada em um mundo e os controles no aparelho.\n$detail"
                 "storage_setup_failed" -> "Falha ao preparar as pastas do jogo: $detail"
                 "first_frame_presented" ->
                     "SUCESSO: a janela do Horizon abriu e apresentou a primeira tela.\n" +
