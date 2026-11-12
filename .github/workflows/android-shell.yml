@@ -1,0 +1,33 @@
+name: Android mobile shell
+
+on:
+  push:
+    branches: [mobile/android-port]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android-shell.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android-shell.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Assemble Android shell
+        working-directory: mobile
+        run: gradle --no-daemon :app:assembleDebug
