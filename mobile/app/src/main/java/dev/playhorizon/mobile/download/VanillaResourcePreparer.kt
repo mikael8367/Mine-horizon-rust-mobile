@@ -91,6 +91,11 @@ class VanillaResourcePreparer(private val context: Context) {
         builder.environment()["JAVA_HOME"] = jdkHome.absolutePath
         builder.environment()["PATH"] = File(jdkHome, "bin").absolutePath +
             File.pathSeparator + (builder.environment()["PATH"] ?: "")
+        builder.environment()["LD_LIBRARY_PATH"] = listOf(
+            File(jdkHome, "lib").absolutePath,
+            File(jdkHome, "lib/server").absolutePath,
+            builder.environment()["LD_LIBRARY_PATH"].orEmpty(),
+        ).filter { it.isNotBlank() }.joinToString(File.pathSeparator)
         builder.environment().remove("JAVA_TOOL_OPTIONS")
         builder.environment().remove("_JAVA_OPTIONS")
         builder.environment().remove("JDK_JAVA_OPTIONS")
