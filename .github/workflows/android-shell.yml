@@ -25,6 +25,8 @@ on:
       - "crates/horizon-client-lib/**"
       - "crates/horizon-client-input/**"
       - "crates/horizon-client-render/**"
+      - "crates/horizon-android/**"
+      - "crates/horizon-threads/**"
       - "crates/horizon-prepare/**"
       - "mods/horizon/src/test/java/dev/horizonlab/parity/**"
       - "research-lock.json"
