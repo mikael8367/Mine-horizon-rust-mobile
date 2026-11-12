@@ -53,6 +53,7 @@ jobs:
           next_file = diff.find("\ndiff --git ", hunk_start)
           hunk = diff[hunk_start: next_file if next_file >= 0 else len(diff)]
           added = "\n".join(line[1:] for line in hunk.splitlines() if line.startswith("+") and not line.startswith("+++"))
+          added = added.replace("#ifndef __ANDROID__\n", "#ifndef __ANDROID__\n#include <ifaddrs.h>\n", 1)
           if marker not in code:
               include = "#include <ifaddrs.h>"
               if code.count(include) != 1:
