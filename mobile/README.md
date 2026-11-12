@@ -33,11 +33,16 @@ The Android shell now includes a real preparation action: CI cross-compiles the
 Rust `horizon-prepare` executable for ARM64 and bundles only Horizon's lock/source
 files (never Mojang game files). A separate manual workflow,
 `.github/workflows/android-jdk25.yml`, builds the full Android ARM64 OpenJDK 25
-(`java` + `javac`) and publishes a SHA-256-manifested release asset. The app
-downloads and verifies that archive, safely extracts it into app-private storage,
-runs the preparer against the player's downloaded version JSON, client/server
-jars, libraries and assets, then runs `horizon-prepare --check` before reporting
-success. This is a preparation toolchain; Rust gameplay remains native.
+(`java` + `javac`) and publishes a SHA-256-manifested release asset. The launcher action **Baixar e preparar recursos vanilla** now runs the complete
+two-stage pipeline: it resolves Mojang's official 26.3 metadata, downloads or
+reuses the version JSON, client/server jars, Maven libraries, asset index and
+all asset objects, and verifies every file by exact size and SHA-1. It then
+downloads/verifies the Android ARM64 JDK release, safely extracts it into
+app-private storage, runs the ARM64 `horizon-prepare` executable against those
+game files, and requires both output manifests plus a successful
+`horizon-prepare --check` before reporting completion. The standalone
+**Baixar arquivos do Minecraft** action remains available. This is a preparation
+toolchain; Rust gameplay remains native.
 
 The JDK release workflow must be run once from GitHub Actions before the in-app
 preparation button can download its runtime. Successful CI compilation does not
@@ -48,7 +53,7 @@ device; the first on-device run remains required to validate this.
 
 - Android app shell is landscape-first and uses immersive mode.
 - The launcher UI remains in `MainActivity`; the native Rust engine opens as a separate fullscreen `NativeActivity` on top of it. Finishing the native activity (Android Back) returns to the launcher instead of replacing its screen.
-- The fullscreen action now refuses to open the engine until both Horizon preparation manifests exist. The launcher provides a separate “Preparar recursos vanilla” action that installs the Android Java 25 toolchain, executes the Rust preparer, and validates its output with `--check`.
+- The fullscreen action now refuses to open the engine until both Horizon preparation manifests exist. The “Baixar e preparar recursos vanilla” action automatically downloads/verifies all official Minecraft 26.3 inputs, installs the Android Java 25 toolchain, executes the Rust preparer, and validates its output with `--check`.
 - `MojangDownloadPlan.kt` resolves the pinned 26.3 version JSON, checks its
   accepted SHA-1, checks the pinned client/server jars and accepted asset index,
   then enumerates library artifacts and content-addressed asset objects.
@@ -84,9 +89,10 @@ device; the first on-device run remains required to validate this.
    Android ARM64 full JDK release assets are published.
 3. Run the Android shell CI and resolve any native preparer or Kotlin/Gradle
    compilation errors.
-4. Test the first preparation on a real Android ARM64 device, including process
-   execution permissions, Java 25 startup, exporter compilation/execution,
-   cancellation, resume/retry, and the final `--check`.
+4. Test the combined download-and-preparation action on a real Android ARM64
+   device, including Mojang downloads, process execution permissions, Java 25
+   startup, exporter compilation/execution, cancellation, resume/retry, and the
+   final `--check`.
 5. Add Microsoft device-code sign-in and Minecraft: Java Edition entitlement
    validation; do not enable gameplay without it.
 6. Test NativeActivity + winit + wgpu surface creation, touch input, lifecycle,
