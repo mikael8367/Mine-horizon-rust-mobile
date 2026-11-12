@@ -104,7 +104,7 @@ class AndroidJdkInstaller(
                 val entry = zip.nextEntry ?: break
                 entries++
                 require(entries <= MAX_ENTRIES) { "Arquivo do Java contém entradas demais" }
-                val name = entry.name.replace('\\\\', '/')
+                val name = entry.name.replace('\\\\', '/').trimEnd('/')
                 require(name.isNotBlank() && !name.startsWith("/") &&
                     name.split('/').none { it == ".." || it.isEmpty() }) {
                     "Caminho inseguro no arquivo do Java"
