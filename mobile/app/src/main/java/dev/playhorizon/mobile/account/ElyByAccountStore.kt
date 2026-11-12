@@ -19,7 +19,7 @@ import javax.crypto.spec.GCMParameterSpec
  */
 class ElyByAccountStore(private val directory: File) {
     companion object {
-        private const val AUTH_URL = "https://authserver.ely.by/authenticate"
+        private const val AUTH_URL = "https://authserver.ely.by/auth/authenticate"
         private const val KEY_ALIAS = "horizon_elyby_account_v1"
         private const val ACCOUNT_FILE = "elyby-account.enc"
         private const val SESSION_FILE = "horizon-session.json"
@@ -30,10 +30,12 @@ class ElyByAccountStore(private val directory: File) {
     fun signIn(username: String, password: CharArray): Profile {
         require(username.isNotBlank()) { "Informe o usuário ou e-mail Ely.by." }
         require(password.isNotEmpty()) { "Informe a senha Ely.by." }
+        val clientToken = java.util.UUID.randomUUID().toString()
         val body = JSONObject().apply {
             put("agent", JSONObject().put("name", "Minecraft").put("version", 1))
             put("username", username)
             put("password", String(password))
+            put("clientToken", clientToken)
             put("requestUser", true)
         }.toString()
         val connection = (URL(AUTH_URL).openConnection() as HttpURLConnection).apply {
@@ -66,7 +68,12 @@ class ElyByAccountStore(private val directory: File) {
         val uuid = profile.optString("id").replace("-", "")
         require(name.matches(Regex("[A-Za-z0-9_]{1,16}"))) { "Nome de perfil Ely.by inválido." }
         require(uuid.matches(Regex("[a-fA-F0-9]{32}"))) { "UUID de perfil Ely.by inválido." }
-        val account = JSONObject().put("name", name).put("uuid", uuid).put("access_token", token)
+        val returnedClientToken = response.optString("clientToken").takeIf { it.isNotBlank() } ?: clientToken
+        val account = JSONObject()
+            .put("name", name)
+            .put("uuid", uuid)
+            .put("access_token", token)
+            .put("client_token", returnedClientToken)
         writeEncrypted(account.toString().toByteArray(Charsets.UTF_8))
         return Profile(name, uuid)
     }
