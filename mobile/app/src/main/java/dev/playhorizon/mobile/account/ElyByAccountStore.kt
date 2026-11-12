@@ -28,6 +28,7 @@ class ElyByAccountStore(private val directory: File) {
     data class Profile(val name: String, val uuid: String)
 
     fun signIn(username: String, password: CharArray): Profile {
+        try {
         require(username.isNotBlank()) { "Informe o usuário ou e-mail Ely.by." }
         require(password.isNotEmpty()) { "Informe a senha Ely.by." }
         val clientToken = java.util.UUID.randomUUID().toString()
@@ -59,7 +60,6 @@ class ElyByAccountStore(private val directory: File) {
             JSONObject(responseText)
         } finally {
             connection.disconnect()
-            password.fill('\u0000')
         }
         val token = response.optString("accessToken").takeIf { it.isNotBlank() }
             ?: error("Ely.by não retornou um token de sessão.")
@@ -77,6 +77,9 @@ class ElyByAccountStore(private val directory: File) {
             .put("client_token", returnedClientToken)
         writeEncrypted(account.toString().toByteArray(Charsets.UTF_8))
         return Profile(name, uuid)
+        } finally {
+            password.fill('\u0000')
+        }
     }
 
     /** Creates a fresh, one-use session file immediately before NativeActivity starts. */
