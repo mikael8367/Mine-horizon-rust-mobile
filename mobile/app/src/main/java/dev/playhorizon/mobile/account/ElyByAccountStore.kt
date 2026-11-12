@@ -40,6 +40,7 @@ class ElyByAccountStore(private val directory: File) {
         }.toString()
         val connection = (URL(AUTH_URL).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
+            instanceFollowRedirects = false
             connectTimeout = 15000
             readTimeout = 20000
             doOutput = true
