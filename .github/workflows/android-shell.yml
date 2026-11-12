@@ -62,6 +62,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Assemble Android shell
+      - name: Compile Android shell and merge native library (no APK)
         working-directory: mobile
-        run: gradle --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:compileDebugKotlin :app:processDebugManifest :app:mergeDebugNativeLibs
