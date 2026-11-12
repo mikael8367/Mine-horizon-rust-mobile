@@ -15,10 +15,37 @@ pub fn android_main(app: AndroidApp) {
     let data_dir = app.internal_data_path().unwrap_or_else(|| std::path::PathBuf::from("."));
     let _ = std::fs::create_dir_all(&data_dir);
     let _ = std::env::set_current_dir(&data_dir);
+    let startup_status = data_dir.join("horizon-startup-status.txt");
+    let write_status = |stage: &str, detail: &str| {
+        let body = format!("{stage}\\n{detail}\\n");
+        let temp = data_dir.join("horizon-startup-status.txt.part");
+        if std::fs::write(&temp, body).is_ok() {
+            let _ = std::fs::rename(&temp, &startup_status);
+        }
+    };
+    write_status("native_entry_started", "NativeActivity chamou android_main.");
 
     let home = data_dir.join("horizon-home");
     let player_dir = data_dir.join("horizon-player");
     let resources = data_dir.join(".local").join("horizon-client").join("26.3");
+    let resource_manifest = resources.join("horizon-resources.json");
+    let prepare_manifest = resources.join("horizon-prepare.json");
+    let resources_ready = [(&resource_manifest, "horizon-resources.json"),
+        (&prepare_manifest, "horizon-prepare.json")]
+        .into_iter()
+        .all(|(path, name)| {
+            std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() > 2)
+                && name.ends_with(".json")
+        });
+    if !resources_ready {
+        write_status(
+            "preflight_failed",
+            "Manifestos de recursos ausentes ou vazios. Execute novamente Baixar e preparar recursos vanilla.",
+        );
+        return;
+    }
+    write_status("native_preflight_ok", "Os dois manifestos de recursos foram encontrados.");
+
     let mut args = vec![
         "--home".to_owned(), home.to_string_lossy().into_owned(),
         "--player-dir".to_owned(), player_dir.to_string_lossy().into_owned(),
