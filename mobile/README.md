@@ -54,6 +54,8 @@ device; the first on-device run remains required to validate this.
 - Android app shell is landscape-first and uses immersive mode.
 - The launcher UI remains in `MainActivity`; the native Rust engine opens as a separate fullscreen `NativeActivity` on top of it. Finishing the native activity (Android Back) returns to the launcher instead of replacing its screen.
 - The fullscreen action now refuses to open the engine until both Horizon preparation manifests exist. The “Baixar e preparar recursos vanilla” action automatically downloads/verifies all official Minecraft 26.3 inputs, installs the Android Java 25 toolchain, executes the Rust preparer, and validates its output with `--check`.
+- NativeActivity now checks that both prepared manifests exist and are non-empty before entering the engine. The Rust startup writes diagnostic milestones for event-loop creation, native window creation, renderer initialization, resource-loading errors, and the first successfully presented title frame. When returning to the launcher, it displays the last confirmed milestone; this is diagnostic instrumentation, not proof of successful gameplay.
+- The window and renderer are created by Horizon's existing winit/wgpu loading-screen path. Android-device validation is still required to confirm the PowerVR driver can create the surface and present frames.
 - `MojangDownloadPlan.kt` resolves the pinned 26.3 version JSON, checks its
   accepted SHA-1, checks the pinned client/server jars and accepted asset index,
   then enumerates library artifacts and content-addressed asset objects.
@@ -93,6 +95,10 @@ device; the first on-device run remains required to validate this.
    device, including Mojang downloads, process execution permissions, Java 25
    startup, exporter compilation/execution, cancellation, resume/retry, and the
    final `--check`.
+5. Launch NativeActivity on a real Android device and verify the event loop,
+   window creation, wgpu renderer initialization, and first presented title
+   frame. Then test opening a world separately; a title frame alone is not
+   gameplay validation.
 5. Add Microsoft device-code sign-in and Minecraft: Java Edition entitlement
    validation; do not enable gameplay without it.
 6. Test NativeActivity + winit + wgpu surface creation, touch input, lifecycle,
