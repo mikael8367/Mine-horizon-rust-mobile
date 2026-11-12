@@ -79,16 +79,43 @@ jobs:
           test -s mobile/app/src/main/assets/prepare-root/research-lock.json
           test -s mobile/app/src/main/assets/prepare-root/crates/horizon-prepare/src/exporters.rs
           test -d mobile/app/src/main/assets/prepare-root/mods/horizon/src/test/java/dev/horizonlab/parity
-      - name: Stage native renderer for Android packaging
+      - name: Stage native renderer and required shared libraries
         shell: bash
         run: |
-          mkdir -p mobile/app/src/main/jniLibs/arm64-v8a
-          cp target/aarch64-linux-android/release/libhorizon_android.so mobile/app/src/main/jniLibs/arm64-v8a/
-          LIB="mobile/app/src/main/jniLibs/arm64-v8a/libhorizon_android.so"
+          set -euo pipefail
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          LIBDIR="mobile/app/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$LIBDIR"
+          cp target/aarch64-linux-android/release/libhorizon_android.so "$LIBDIR/"
+          LIB="$LIBDIR/libhorizon_android.so"
           test -s "$LIB"
           file "$LIB"
           readelf -h "$LIB" | grep -E 'Class:.*ELF64'
           readelf -h "$LIB" | grep -E 'Machine:.*AArch64'
+
+          mapfile -t NEEDED < <(readelf -d "$LIB" | grep -o 'Shared library: \\[[^]]*\\]' | cut -d'[' -f2 | tr -d ']')
+          printf 'Native runtime DT_NEEDED dependencies:\\n'
+          printf '  %s\\n' "${NEEDED[@]}"
+
+          # Rust normally links against Android's platform C runtime. If a future
+          # dependency introduces libc++_shared, ship the matching ARM64 NDK copy.
+          if printf '%s\\n' "${NEEDED[@]}" | grep -qx 'libc++_shared.so'; then
+            CXX_RUNTIME="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
+            test -s "$CXX_RUNTIME"
+            cp "$CXX_RUNTIME" "$LIBDIR/libc++_shared.so"
+            readelf -h "$LIBDIR/libc++_shared.so" | grep -E 'Machine:.*AArch64'
+          fi
+
+          for dep in "${NEEDED[@]}"; do
+            case "$dep" in
+              libc.so|libm.so|libdl.so|liblog.so|libandroid.so|libz.so|libvulkan.so|libEGL.so|libGLESv2.so|libOpenSLES.so|libjnigraphics.so|libnativewindow.so|libsync.so|libmediandk.so|libaaudio.so|libcamera2ndk.so|libstdc++.so|libc++_shared.so)
+                ;;
+              *)
+                echo "Unaccounted native shared-library dependency: $dep"
+                exit 1
+                ;;
+            esac
+          done
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -96,27 +123,37 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Compile Android shell and merge native library (no APK)
+      - name: Compile Android shell and merge native libraries (no APK)
         working-directory: mobile
         run: gradle --no-daemon :app:compileDebugKotlin :app:processDebugManifest :app:mergeDebugNativeLibs :app:mergeDebugAssets
-      - name: Verify ARM64 library was merged for Android packaging
+      - name: Verify ARM64 native libraries were merged
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE="mobile/app/src/main/jniLibs/arm64-v8a/libhorizon_android.so"
-          test -s "$SOURCE"
-          mapfile -t MERGED < <(find mobile/app/build/intermediates/merged_native_libs/debug -type f -path '*/lib/arm64-v8a/libhorizon_android.so' -print)
-          if [ "${#MERGED[@]}" -ne 1 ]; then
-            echo "Expected exactly one merged ARM64 Horizon library; found ${#MERGED[@]}."
-            find mobile/app/build/intermediates/merged_native_libs/debug -type f -print || true
+          SOURCE_DIR="mobile/app/src/main/jniLibs/arm64-v8a"
+          MERGED_DIR="mobile/app/build/intermediates/merged_native_libs/debug"
+          test -s "$SOURCE_DIR/libhorizon_android.so"
+          mapfile -t SOURCE_LIBS < <(find "$SOURCE_DIR" -maxdepth 1 -type f -name '*.so' -printf '%f\\n' | sort)
+          mapfile -t MERGED_LIBS < <(find "$MERGED_DIR" -type f -path '*/lib/arm64-v8a/*.so' -printf '%f\\n' | sort -u)
+          if [ "${SOURCE_LIBS[*]}" != "${MERGED_LIBS[*]}" ]; then
+            echo "Source and Gradle-merged ARM64 native libraries differ."
+            echo "Source: ${SOURCE_LIBS[*]}"
+            echo "Merged: ${MERGED_LIBS[*]}"
             exit 1
           fi
-          cmp --silent "$SOURCE" "${MERGED[0]}"
-          echo "Verified packaged merge input: ${MERGED[0]}"
-      - name: Publish Android ARM64 native library
+          for name in "${SOURCE_LIBS[@]}"; do
+            mapfile -t COPIES < <(find "$MERGED_DIR" -type f -path "*/lib/arm64-v8a/$name" -print)
+            if [ "${#COPIES[@]}" -ne 1 ]; then
+              echo "Expected exactly one merged copy of $name; found ${#COPIES[@]}."
+              exit 1
+            fi
+            cmp --silent "$SOURCE_DIR/$name" "${COPIES[0]}"
+          done
+          echo "Verified all ARM64 runtime libraries merged byte-for-byte."
+      - name: Publish Android ARM64 native runtime libraries
         uses: actions/upload-artifact@v4
         with:
-          name: libhorizon-android-arm64
-          path: mobile/app/src/main/jniLibs/arm64-v8a/libhorizon_android.so
+          name: horizon-android-arm64-runtime-libraries
+          path: mobile/app/src/main/jniLibs/arm64-v8a/*.so
           if-no-files-found: error
           retention-days: 14
