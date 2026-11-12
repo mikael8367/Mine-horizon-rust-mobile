@@ -27,7 +27,7 @@ class ElyByAccountStore(private val directory: File) {
 
     data class Profile(val name: String, val uuid: String)
 
-    fun signIn(username: String, password: CharArray): Profile {
+    fun signIn(username: String, password: CharArray, twoFactorCode: String? = null): Profile {
         try {
             require(username.isNotBlank()) { "Informe o usuário ou e-mail Ely.by." }
             require(password.isNotEmpty()) { "Informe a senha Ely.by." }
@@ -35,7 +35,12 @@ class ElyByAccountStore(private val directory: File) {
             val body = JSONObject().apply {
                 put("agent", JSONObject().put("name", "Minecraft").put("version", 1))
                 put("username", username)
-                put("password", String(password))
+                val basePassword = String(password)
+                val code = twoFactorCode?.trim().orEmpty()
+                require(code.isEmpty() || code.matches(Regex("[0-9]{6}"))) {
+                    "O código 2FA deve conter 6 números."
+                }
+                put("password", if (code.isEmpty()) basePassword else "$basePassword:$code")
                 put("clientToken", clientToken)
                 put("requestUser", true)
             }.toString()
