@@ -1,0 +1,72 @@
+name: Build Android Java 25 JDK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-jdk25-arm64
+  cancel-in-progress: false
+
+jobs:
+  build-jdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout Android OpenJDK build scripts
+        uses: actions/checkout@v4
+        with:
+          repository: FCL-Team/Android-OpenJDK-Build
+          ref: Build_JRE_25
+          path: android-openjdk
+
+      - name: Build full OpenJDK 25 for Android ARM64
+        working-directory: android-openjdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ci_build_arch_aarch64.sh
+          test -x jdkout/bin/java
+          test -x jdkout/bin/javac
+          jdkout/bin/java -version
+          jdkout/bin/javac -version
+
+      - name: Package JDK and generate integrity manifest
+        working-directory: android-openjdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime-package/jdk
+          cp -a jdkout/. runtime-package/jdk/
+          chmod +x runtime-package/jdk/bin/java runtime-package/jdk/bin/javac
+          (cd runtime-package && zip -qr -9 ../horizon-jdk25-android-arm64.zip jdk)
+          SHA="$(sha256sum horizon-jdk25-android-arm64.zip | cut -d' ' -f1)"
+          cat > runtime.json <<EOF
+          {
+            "schema": 1,
+            "java_major": 25,
+            "os": "android",
+            "architecture": "aarch64",
+            "archive": "horizon-jdk25-android-arm64.zip",
+            "sha256": "$SHA"
+          }
+          EOF
+          unzip -l horizon-jdk25-android-arm64.zip | grep -E 'jdk/bin/(java|javac)$'
+          cat runtime.json
+
+      - name: Publish versioned Android JDK runtime assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: android-openjdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="android-jdk25-arm64"
+          gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 || \
+            gh release create "$TAG" --repo "${GITHUB_REPOSITORY}" \
+              --title "Horizon Android OpenJDK 25 ARM64" \
+              --notes "Android ARM64 OpenJDK 25 full JDK for the Horizon vanilla resource preparer. Built from FCL-Team/Android-OpenJDK-Build branch Build_JRE_25. Contains Java and javac; no Minecraft game files."
+          gh release upload "$TAG" horizon-jdk25-android-arm64.zip runtime.json \
+            --repo "${GITHUB_REPOSITORY}" --clobber
