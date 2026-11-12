@@ -37,7 +37,7 @@ class MojangDownloadPlan {
             "61fff1316bd50312624a858bbb5eb18fa45208ed",
             "5df1795e16eea19d75b923d66ecca9ce183353c5",
             "80608ff6753705b6a82e2cb86a5937d4d233abd4",
-            "9f67e10ed013deeaad20ba0af8a?invalid"
+            "9f67e10ed013deeaad20ac3c800652765d493408"
         ).filter { it.matches(Regex("[a-f0-9]{40}")) }.toSet()
         private val ASSET_INDEX_SHA1 = setOf(
             "abfaa525f923f807df8b4e4d29c1b5e3a104adbe",
