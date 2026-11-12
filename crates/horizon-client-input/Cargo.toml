@@ -8,7 +8,7 @@ description = "The client's input layer: key bindings and their names, mouse, co
 
 [dependencies]
 horizon-client-core = { path = "../horizon-client-core" }
-winit = "0.30.13"
+winit = { version = "0.30.13", features = ["android-native-activity"] }
 png = "0.18"
 arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }
 
