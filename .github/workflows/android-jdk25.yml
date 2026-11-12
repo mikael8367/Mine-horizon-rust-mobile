@@ -35,9 +35,8 @@ jobs:
           from pathlib import Path
           p = Path("build_jdk.sh")
           s = p.read_text()
-          anchor = "git reset --hard\\n"
-          patch = """git reset --hard
-          if ! grep -q '^#include <ifaddrs.h>' src/hotspot/os/linux/os_perf_linux.cpp; then
+          anchor = "git reset --hard"
+          patch = anchor + chr(10) + """if ! grep -q '^#include <ifaddrs.h>' src/hotspot/os/linux/os_perf_linux.cpp; then
             sed -i '1i#include <ifaddrs.h>' src/hotspot/os/linux/os_perf_linux.cpp
           fi
           """
