@@ -34,8 +34,9 @@ jobs:
           bash ci_build_arch_aarch64.sh
           test -x jdkout/bin/java
           test -x jdkout/bin/javac
-          jdkout/bin/java -version
-          jdkout/bin/javac -version
+          file jdkout/bin/java jdkout/bin/javac
+          readelf -h jdkout/bin/java | grep -E 'Machine:.*AArch64'
+          readelf -h jdkout/bin/javac | grep -E 'Machine:.*AArch64'
 
       - name: Package JDK and generate integrity manifest
         working-directory: android-openjdk
