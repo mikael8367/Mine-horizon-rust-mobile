@@ -3,6 +3,7 @@ package dev.playhorizon.mobile.download
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 /**
  * Resolves the exact Horizon-pinned Minecraft 26.3 inputs from Mojang metadata.
@@ -49,7 +50,12 @@ class MojangDownloadPlan {
     }
 
     fun resolve(): Plan {
-        val manifest = JSONObject(fetchText(MANIFEST_URL))
+        val manifestText = fetchText(MANIFEST_URL)
+        val manifestSha1 = sha1(manifestText.toByteArray(Charsets.UTF_8))
+        require(manifestSha1 in MANIFEST_SHA1) {
+            "Mojang's version manifest differs from the pinned Horizon manifest"
+        }
+        val manifest = JSONObject(manifestText)
         val versions = manifest.getJSONArray("versions")
         var versionUrl: String? = null
         for (i in 0 until versions.length()) {
@@ -66,38 +72,23 @@ class MojangDownloadPlan {
 
         val artifacts = mutableListOf<Artifact>()
         val downloads = versionJson.getJSONObject("downloads")
-        artifacts += artifact(
-            downloads.getJSONObject("client"),
-            "versions/$VERSION/$VERSION.jar",
-            "client",
-            CLIENT_SHA1,
-        )
-        artifacts += artifact(
-            downloads.getJSONObject("server"),
-            "versions/$VERSION/$VERSION-server.jar",
-            "server",
-            SERVER_SHA1,
-        )
+        artifacts += artifact(downloads.getJSONObject("client"), "versions/$VERSION/$VERSION.jar", "client", CLIENT_SHA1)
+        artifacts += artifact(downloads.getJSONObject("server"), "versions/$VERSION/$VERSION-server.jar", "server", SERVER_SHA1)
 
         val libraries = versionJson.optJSONArray("libraries")
         if (libraries != null) {
             for (i in 0 until libraries.length()) {
                 val library = libraries.getJSONObject(i)
-                val artifact = library.optJSONObject("downloads")?.optJSONObject("artifact") ?: continue
-                val path = artifact.optString("path")
-                if (path.isBlank()) continue
-                artifacts += artifact(artifact, "libraries/$path", "library", null)
+                val libraryArtifact = library.optJSONObject("downloads")?.optJSONObject("artifact") ?: continue
+                val libraryPath = libraryArtifact.optString("path")
+                if (libraryPath.isBlank()) continue
+                artifacts += artifact(libraryArtifact, "libraries/$libraryPath", "library", null)
             }
         }
 
         val assetIndex = versionJson.getJSONObject("assetIndex")
         val assetIndexId = assetIndex.getString("id")
-        val indexArtifact = artifact(
-            assetIndex,
-            "assets/indexes/$assetIndexId.json",
-            "asset-index",
-            null,
-        )
+        val indexArtifact = artifact(assetIndex, "assets/indexes/$assetIndexId.json", "asset-index", null)
         require(indexArtifact.sha1 in ASSET_INDEX_SHA1) {
             "The asset index is not one of the pinned Minecraft 26.3 indexes"
         }
@@ -124,12 +115,7 @@ class MojangDownloadPlan {
         return Plan(VERSION, artifacts.distinctBy { it.relativePath })
     }
 
-    private fun artifact(
-        json: JSONObject,
-        path: String,
-        role: String,
-        pinnedSha1: String?,
-    ): Artifact {
+    private fun artifact(json: JSONObject, path: String, role: String, pinnedSha1: String?): Artifact {
         val url = json.getString("url")
         requireTrustedUrl(url)
         val sha1 = json.getString("sha1").lowercase()
@@ -142,7 +128,8 @@ class MojangDownloadPlan {
         return Artifact(path, url, sha1, size, role)
     }
 
-    private fun fetchText(urlText: String): String {
+    private fun fetchText(urlText: String, redirects: Int = 0): String {
+        require(redirects <= 5) { "Too many metadata redirects" }
         requireTrustedUrl(urlText)
         val connection = URL(urlText).openConnection() as HttpURLConnection
         try {
@@ -154,8 +141,7 @@ class MojangDownloadPlan {
                 val location = connection.getHeaderField("Location") ?: error("Metadata redirect has no location")
                 val next = URL(URL(urlText), location)
                 requireTrustedUrl(next.toString())
-                connection.disconnect()
-                return fetchText(next.toString())
+                return fetchText(next.toString(), redirects + 1)
             }
             require(code == HttpURLConnection.HTTP_OK) { "Mojang metadata request failed: HTTP $code" }
             return connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
@@ -163,6 +149,9 @@ class MojangDownloadPlan {
             connection.disconnect()
         }
     }
+
+    private fun sha1(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-1").digest(bytes).joinToString("") { "%02x".format(it) }
 
     private fun requireTrustedUrl(value: String) {
         val url = URL(value)
