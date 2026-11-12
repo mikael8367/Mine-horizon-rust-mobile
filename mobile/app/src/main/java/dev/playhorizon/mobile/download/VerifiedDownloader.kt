@@ -138,7 +138,7 @@ class VerifiedDownloader(
     }
 
     private fun matchesDigest(file: File, algorithm: String, expected: String): Boolean {
-        val digest = MessageDigest.getInstance(algorithm.replace("-", ""))
+        val digest = MessageDigest.getInstance(algorithm)
         DigestInputStream(file.inputStream().buffered(), digest).use { input ->
             val buffer = ByteArray(64 * 1024)
             while (input.read(buffer) != -1) { /* stream through checksum */ }
