@@ -617,10 +617,12 @@ use std::{
     thread::JoinHandle,
     time::{Duration, Instant},
 };
+#[cfg(target_os = "android")]
+use winit::event::TouchPhase;
 use winit::{
     application::ApplicationHandler,
     error::EventLoopError,
-    event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
+    event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::{CursorGrabMode, Window, WindowId},
@@ -9845,7 +9847,9 @@ impl Game<'_> {
             let position = touch.location;
             match touch.phase {
                 TouchPhase::Started => {
-                    if !self.android_touch_pointers.contains_key(&id) {
+                    if !self.android_touch_pointers.contains_key(&id)
+                        && self.android_touch_pointers.len() < 2
+                    {
                         let button = if self.android_touch_pointers.is_empty() {
                             MouseButton::Left
                         } else {
@@ -9897,6 +9901,8 @@ impl Game<'_> {
             self.physical_keys.clear();
             self.physical_buttons.clear();
             self.drag_button = None;
+            #[cfg(target_os = "android")]
+            self.android_touch_pointers.clear();
         }
         if let WindowEvent::ModifiersChanged(m) = &event {
             self.update_modifiers(m.state());
