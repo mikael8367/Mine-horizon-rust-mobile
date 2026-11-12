@@ -64,7 +64,11 @@ class MainActivity : Activity() {
         if (nativeEngineOpened || startupPreferences.getBoolean("native_launch_pending", false)) {
             nativeEngineOpened = false
             startupPreferences.edit().putBoolean("native_launch_pending", false).apply()
-            val statusFile = File(filesDir, "horizon-startup-status.txt")
+            // Preflight runs before the native engine switches to horizon-game;
+            // later milestones are written inside that game directory.
+            val gameStatusFile = File(File(filesDir, "horizon-game"), "horizon-startup-status.txt")
+            val launcherStatusFile = File(filesDir, "horizon-startup-status.txt")
+            val statusFile = if (gameStatusFile.isFile) gameStatusFile else launcherStatusFile
             val lines = runCatching { statusFile.readLines(Charsets.UTF_8) }.getOrDefault(emptyList())
             val stage = lines.firstOrNull().orEmpty()
             val detail = lines.drop(1).joinToString(" ").trim()
@@ -343,6 +347,8 @@ class MainActivity : Activity() {
                     }
                     File(filesDir, "horizon-startup-status.txt").delete()
                     File(filesDir, "horizon-startup-status.txt.part").delete()
+                    File(File(filesDir, "horizon-game"), "horizon-startup-status.txt").delete()
+                    File(File(filesDir, "horizon-game"), "horizon-startup-status.txt.part").delete()
                     getSharedPreferences("horizon_launcher", MODE_PRIVATE).edit()
                         .putBoolean("native_launch_pending", true).apply()
                     nativeEngineOpened = true
