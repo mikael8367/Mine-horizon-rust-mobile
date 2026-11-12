@@ -12,9 +12,6 @@ import java.security.MessageDigest
 /**
  * Blocking downloader. Call from a worker thread, never from the UI thread.
  * A .part file is retained after network errors so the next attempt can resume.
- *
- * The expected digest must come from trusted Mojang metadata or a verified
- * Horizon release manifest; never accept an arbitrary checksum from UI.
  */
 class VerifiedDownloader(
     private val connectTimeoutMs: Int = 15_000,
@@ -38,6 +35,7 @@ class VerifiedDownloader(
         require(expectedDigest.matches(Regex("[a-fA-F0-9]{$digestLength}"))) {
             "Invalid expected checksum"
         }
+        require(expectedSize == null || expectedSize >= 0L) { "Invalid expected file size" }
 
         var currentUrl = URL(urlText)
         require(currentUrl.protocol == "https" && isAllowedHost(currentUrl.host)) {
@@ -47,6 +45,18 @@ class VerifiedDownloader(
             if (!parent.exists() && !parent.mkdirs()) error("Cannot create download directory")
         }
         val part = File(destination.parentFile, destination.name + ".part")
+
+        // Recover cleanly if the previous process died after downloading the whole file.
+        if (part.isFile && expectedSize != null && part.length() == expectedSize) {
+            if (matchesDigest(part, normalizedAlgorithm, expectedDigest)) {
+                finalizeFile(part, destination)
+                return destination
+            }
+            if (!part.delete()) error("Cannot discard invalid partial download")
+        } else if (part.exists() && expectedSize != null && part.length() > expectedSize) {
+            if (!part.delete()) error("Cannot discard oversized partial download")
+        }
+
         var connection: HttpURLConnection? = null
         try {
             var redirects = 0
@@ -81,8 +91,14 @@ class VerifiedDownloader(
                 error("Download failed: HTTP $code")
             }
             if (append) {
-                val range = active.getHeaderField("Content-Range") ?: error("Missing Content-Range")
-                require(range.startsWith("bytes ${part.length()}-")) { "Invalid resume range" }
+                val range = active.getHeaderField("Content-Range") ?: run {
+                    part.delete()
+                    error("Missing Content-Range")
+                }
+                if (!range.startsWith("bytes ${part.length()}-")) {
+                    part.delete()
+                    error("Invalid resume range")
+                }
             } else if (part.exists() && !part.delete()) {
                 error("Cannot restart incomplete download")
             }
@@ -105,44 +121,48 @@ class VerifiedDownloader(
                 }
             }
 
-            if (expectedSize != null) {
-                require(part.length() == expectedSize) {
-                    "Size mismatch: expected $expectedSize bytes, got ${part.length()}"
-                }
+            if (expectedSize != null && part.length() != expectedSize) {
+                val actualSize = part.length()
+                part.delete()
+                error("Size mismatch: expected $expectedSize bytes, got $actualSize")
             }
-            val digest = MessageDigest.getInstance(normalizedAlgorithm.replace("-", ""))
-            DigestInputStream(part.inputStream().buffered(), digest).use { stream ->
-                val buffer = ByteArray(64 * 1024)
-                while (stream.read(buffer) != -1) { /* stream through digest without loading file into RAM */ }
+            require(matchesDigest(part, normalizedAlgorithm, expectedDigest)) {
+                "Checksum mismatch for downloaded file"
             }
-            val actual = digest.digest().joinToString("") { "%02x".format(it) }
-            require(actual.equals(expectedDigest, ignoreCase = true)) {
-                "Checksum mismatch: expected $expectedDigest, got $actual"
-            }
-
-            // Same-directory move prevents exposing a partial file as installed.
-            Files.move(
-                part.toPath(),
-                destination.toPath(),
-                StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE,
-            )
+            finalizeFile(part, destination)
             return destination
         } finally {
             connection?.disconnect()
         }
     }
 
-    private fun isAllowedHost(host: String): Boolean {
-        return host.lowercase() in setOf(
-            "piston-meta.mojang.com",
-            "piston-data.mojang.com",
-            "launcher.mojang.com",
-            "libraries.minecraft.net",
-            "resources.download.minecraft.net",
-            "github.com",
-            "objects.githubusercontent.com",
-            "release-assets.githubusercontent.com",
+    private fun matchesDigest(file: File, algorithm: String, expected: String): Boolean {
+        val digest = MessageDigest.getInstance(algorithm.replace("-", ""))
+        DigestInputStream(file.inputStream().buffered(), digest).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (input.read(buffer) != -1) { /* stream through checksum */ }
+        }
+        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        return actual.equals(expected, ignoreCase = true)
+    }
+
+    private fun finalizeFile(part: File, destination: File) {
+        Files.move(
+            part.toPath(),
+            destination.toPath(),
+            StandardCopyOption.REPLACE_EXISTING,
+            StandardCopyOption.ATOMIC_MOVE,
         )
     }
+
+    private fun isAllowedHost(host: String): Boolean = host.lowercase() in setOf(
+        "piston-meta.mojang.com",
+        "piston-data.mojang.com",
+        "launcher.mojang.com",
+        "libraries.minecraft.net",
+        "resources.download.minecraft.net",
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+    )
 }
