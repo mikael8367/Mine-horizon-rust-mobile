@@ -30,7 +30,7 @@ class MojangDownloadPlan {
         private const val MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
         private const val CLIENT_SHA1 = "e877b6a07acd633fb3bb475002175cec036e7b87"
         private const val SERVER_SHA1 = "33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c"
-        private val MANIFEST_SHA1 = setOf(
+        private val VERSION_JSON_SHA1 = setOf(
             "11f1aefe473eefba0af62e3286c33b692807b2eb",
             "4fe1aa1ef8da1cb95c5bad1fb98890ca56dd8ca3",
             "702fe59163c6ee6578607daa85811d9bc9c7cc40",
@@ -50,12 +50,7 @@ class MojangDownloadPlan {
     }
 
     fun resolve(): Plan {
-        val manifestText = fetchText(MANIFEST_URL)
-        val manifestSha1 = sha1(manifestText.toByteArray(Charsets.UTF_8))
-        require(manifestSha1 in MANIFEST_SHA1) {
-            "Mojang's version manifest differs from the pinned Horizon manifest"
-        }
-        val manifest = JSONObject(manifestText)
+        val manifest = JSONObject(fetchText(MANIFEST_URL))
         val versions = manifest.getJSONArray("versions")
         var versionUrl: String? = null
         for (i in 0 until versions.length()) {
@@ -67,7 +62,12 @@ class MojangDownloadPlan {
         }
         val metadataUrl = versionUrl ?: error("Minecraft $VERSION was not found in Mojang's version manifest")
         requireTrustedUrl(metadataUrl)
-        val versionJson = JSONObject(fetchText(metadataUrl))
+        val versionText = fetchText(metadataUrl)
+        val versionSha1 = sha1(versionText.toByteArray(Charsets.UTF_8))
+        require(versionSha1 in VERSION_JSON_SHA1) {
+            "Minecraft $VERSION metadata differs from the Horizon-pinned version JSON"
+        }
+        val versionJson = JSONObject(versionText)
         require(versionJson.optString("id") == VERSION) { "Mojang returned unexpected game version metadata" }
 
         val artifacts = mutableListOf<Artifact>()
