@@ -62,7 +62,28 @@ class MainActivity : Activity() {
         super.onResume()
         if (nativeEngineOpened) {
             nativeEngineOpened = false
-            statusText?.text = "Você voltou ao launcher. O motor nativo foi fechado."
+            val statusFile = File(filesDir, "horizon-startup-status.txt")
+            val lines = runCatching { statusFile.readLines(Charsets.UTF_8) }.getOrDefault(emptyList())
+            val stage = lines.firstOrNull().orEmpty()
+            val detail = lines.drop(1).joinToString(" ").trim()
+            statusText?.text = when (stage) {
+                "first_frame_presented" ->
+                    "SUCESSO: a janela do Horizon abriu e apresentou a primeira tela.\\n" +
+                        "A inicialização gráfica foi confirmada; ainda falta testar o gameplay no aparelho.\\n$detail"
+                "boot_renderer_ready" ->
+                    "A janela abriu e o renderer foi inicializado, mas a primeira tela ainda não foi confirmada.\\n$detail"
+                "window_created" ->
+                    "A janela nativa foi criada. O renderer ainda não confirmou a inicialização.\\n$detail"
+                "window_create_failed" -> "Falha ao criar a janela do jogo: $detail"
+                "renderer_boot_failed" -> "Falha ao inicializar a renderização: $detail"
+                "resource_loading_failed" -> "Falha ao carregar os recursos do jogo: $detail"
+                "event_loop_failed" -> "Falha no loop de eventos Android: $detail"
+                "preflight_failed" -> "Os recursos não passaram na verificação nativa: $detail"
+                "native_preflight_ok", "engine_starting", "event_loop_ready" ->
+                    "O motor foi iniciado, mas ainda não confirmou a criação da janela.\\n$detail"
+                "native_entry_started" -> "NativeActivity iniciou, mas o motor não avançou para a validação dos recursos."
+                else -> "O motor nativo foi fechado sem registrar a primeira tela. Confira o log de inicialização."
+            }
         }
     }
 
@@ -299,8 +320,10 @@ class MainActivity : Activity() {
                 val preparedDir = File(filesDir, ".local/horizon-client/26.3")
                 val preparedManifest = File(preparedDir, "horizon-resources.json")
                 val preparedStamp = File(preparedDir, "horizon-prepare.json")
-                if (!preparedManifest.isFile || !preparedStamp.isFile) {
-                    statusText?.text = "Os recursos vanilla ainda não foram preparados e validados. Use o botão Preparar recursos vanilla."
+                if (!preparedManifest.isFile || preparedManifest.length() <= 2L ||
+                    !preparedStamp.isFile || preparedStamp.length() <= 2L
+                ) {
+                    statusText?.text = "Os recursos vanilla ainda não foram preparados ou algum manifesto está vazio. Use Baixar e preparar recursos vanilla."
                     return@setOnClickListener
                 }
                 statusText?.text = "Recursos vanilla validados. Abrindo o motor Rust ARM64..."
@@ -312,6 +335,8 @@ class MainActivity : Activity() {
                     } else {
                         File(filesDir, "horizon-session.json").delete()
                     }
+                    File(filesDir, "horizon-startup-status.txt").delete()
+                    File(filesDir, "horizon-startup-status.txt.part").delete()
                     nativeEngineOpened = true
                     startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
                 } catch (error: Throwable) {
