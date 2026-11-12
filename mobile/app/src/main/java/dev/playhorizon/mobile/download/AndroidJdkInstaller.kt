@@ -61,6 +61,7 @@ class AndroidJdkInstaller(
         }
 
         if (isCancelled()) throw InterruptedException("Instalação do Java cancelada")
+        runtimeRoot.parentFile?.let { check(it.mkdirs() || it.isDirectory) }
         val staging = File(runtimeRoot.parentFile, ".horizon-jdk25-installing")
         if (staging.exists()) staging.deleteRecursively()
         check(staging.mkdirs()) { "Não foi possível criar a pasta temporária do Java" }
@@ -81,6 +82,7 @@ class AndroidJdkInstaller(
             if (runtimeRoot.exists()) check(runtimeRoot.deleteRecursively()) {
                 "Não foi possível substituir a instalação antiga do Java"
             }
+            check(runtimeRoot.mkdirs()) { "Não foi possível criar a pasta final do Java" }
             check(stagedHome.renameTo(javaHome)) { "Não foi possível ativar o OpenJDK 25" }
             return javaHome
         } finally {
