@@ -11,6 +11,8 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.Button
 import android.widget.EditText
+import android.text.InputType
+import dev.playhorizon.mobile.account.ElyByAccountStore
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -36,6 +38,7 @@ class MainActivity : Activity() {
     private var cancelButton: Button? = null
     private var prepareButton: Button? = null
     private var playerNameInput: EditText? = null
+    private var elyByButton: Button? = null
     private var downloadTask: Future<*>? = null
     private var workerBusy = false
     private var nativeEngineOpened = false
@@ -132,6 +135,77 @@ class MainActivity : Activity() {
             }
         })
 
+        content.addView(TextView(this).apply {
+            text = "CONTA ELY.BY"
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(0xFFE8F5E9.toInt())
+            setPadding(0, dp(16), 0, dp(6))
+        })
+        content.addView(TextView(this).apply {
+            text = "Entre com sua conta Ely.by. A senha é enviada somente por HTTPS e não é salva. O token fica criptografado pelo Android Keystore."
+            textSize = 13f
+            setTextColor(0xFFB8C9B8.toInt())
+        })
+        val elyUsername = EditText(this).apply {
+            hint = "Usuário ou e-mail Ely.by"
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setTextColor(0xFFFFFFFF.toInt())
+            setHintTextColor(0xFF9EAA9E.toInt())
+        }
+        val elyPassword = EditText(this).apply {
+            hint = "Senha Ely.by"
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setTextColor(0xFFFFFFFF.toInt())
+            setHintTextColor(0xFF9EAA9E.toInt())
+        }
+        content.addView(elyUsername)
+        content.addView(elyPassword)
+        val elyStore = ElyByAccountStore(filesDir)
+        val elyAction = Button(this).apply {
+            text = if (elyStore.hasAccount()) "Conectar novamente / atualizar conta Ely.by" else "Entrar com Ely.by"
+            setOnClickListener {
+                if (workerBusy) return@setOnClickListener
+                val username = elyUsername.text?.toString()?.trim().orEmpty()
+                val password = elyPassword.text?.toString()?.toCharArray() ?: CharArray(0)
+                if (username.isBlank() || password.isEmpty()) {
+                    statusText?.text = "Informe o usuário e a senha Ely.by."
+                    password.fill('\\u0000')
+                    return@setOnClickListener
+                }
+                isEnabled = false
+                text = "Conectando à Ely.by..."
+                statusText?.text = "Autenticando com Ely.by por HTTPS..."
+                downloadTask = worker.submit {
+                    try {
+                        val profile = elyStore.signIn(username, password)
+                        runOnUiThread {
+                            elyPassword.text?.clear()
+                            statusText?.text = "Conta Ely.by conectada: ${profile.name}. A sessão será entregue ao motor ao iniciar."
+                            elyAction.text = "Conta Ely.by conectada: ${profile.name}"
+                        }
+                    } catch (error: Throwable) {
+                        runOnUiThread {
+                            elyPassword.text?.clear()
+                            statusText?.text = "Falha no login Ely.by: ${error.message ?: error.javaClass.simpleName}"
+                            elyAction.text = "Tentar login Ely.by novamente"
+                        }
+                    } finally {
+                        runOnUiThread {
+                            isEnabled = true
+                            workerBusy = false
+                            downloadTask = null
+                        }
+                    }
+                    workerBusy = true
+                }
+            }
+        }
+        elyByButton = elyAction
+        content.addView(elyAction)
+
         val downloadAction = Button(this).apply {
             text = "Baixar arquivos do Minecraft"
             setOnClickListener { startMinecraftDownload() }
@@ -163,6 +237,10 @@ class MainActivity : Activity() {
                 }
                 statusText?.text = "Recursos vanilla validados. Abrindo o motor Rust ARM64..."
                 try {
+                    val accountStore = ElyByAccountStore(filesDir)
+                    if (accountStore.hasAccount()) {
+                        accountStore.createLaunchSessionFile()
+                    }
                     nativeEngineOpened = true
                     startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
                 } catch (error: Throwable) {
