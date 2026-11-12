@@ -175,6 +175,7 @@ class MainActivity : Activity() {
         content.addView(elyPassword)
         content.addView(elyTwoFactor)
         val elyStore = ElyByAccountStore(filesDir)
+        var elyDisconnectAction: Button? = null
         val elyAction = Button(this).apply {
             text = if (elyStore.hasAccount()) "Conectar novamente / atualizar conta Ely.by" else "Entrar com Ely.by"
             setOnClickListener {
@@ -197,8 +198,9 @@ class MainActivity : Activity() {
                         runOnUiThread {
                             elyPassword.text?.clear()
                             elyTwoFactor.text?.clear()
-                            statusText?.text = "Conta Ely.by conectada: ${profile.name}. A sessão será entregue ao motor ao iniciar."
+                            statusText?.text = "Conta Ely.by conectada: ${profile.name}. Selecione Ely.by em 'Usar esta conta ao iniciar' para jogar com ela."
                             elyAction.text = "Conta Ely.by conectada: ${profile.name}"
+                            elyDisconnectAction?.isEnabled = true
                         }
                     } catch (error: Throwable) {
                         runOnUiThread {
@@ -247,7 +249,7 @@ class MainActivity : Activity() {
                 .putString("account_mode", selectedAccountMode).apply()
         }
         content.addView(accountModes)
-        content.addView(Button(this).apply {
+        elyDisconnectAction = Button(this).apply {
             text = "Desconectar conta Ely.by"
             isEnabled = elyStore.hasAccount()
             setOnClickListener {
@@ -262,13 +264,14 @@ class MainActivity : Activity() {
                     elyTwoFactor.text?.clear()
                     elyUsername.text?.clear()
                     elyAction.text = "Entrar com Ely.by"
-                    isEnabled = false
+                    elyDisconnectAction?.isEnabled = false
                     statusText?.text = "Conta Ely.by desconectada. Token, sessão temporária e chave local foram removidos."
                 } catch (error: Throwable) {
                     statusText?.text = "Falha ao desconectar Ely.by: ${error.message ?: error.javaClass.simpleName}"
                 }
             }
-        })
+        }
+        content.addView(elyDisconnectAction)
 
 
         val downloadAction = Button(this).apply {
