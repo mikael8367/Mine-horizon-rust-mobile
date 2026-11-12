@@ -1,31 +1,175 @@
 package dev.playhorizon.mobile
 
 import android.app.Activity
+import android.content.pm.ActivityInfo
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
-import android.content.pm.ActivityInfo
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.ScrollView
+import android.widget.TextView
+import dev.playhorizon.mobile.download.MinecraftDataInstaller
+import dev.playhorizon.mobile.download.MojangDownloadPlan
+import java.io.File
+import java.util.Locale
+import java.util.concurrent.Executors
 
 /**
- * Android host shell for Horizon.
- *
- * This deliberately does not pretend the Rust engine is already connected.
- * The native entry point, Android surface hand-off, and lifecycle bridge are
- * the next porting milestone.
+ * Minimal Android download screen. It downloads and verifies the official
+ * Minecraft inputs; it does not claim that the native Rust engine is playable.
  */
 class MainActivity : Activity() {
+    private val worker = Executors.newSingleThreadExecutor()
+    private var downloadButton: Button? = null
+    private var progressBar: ProgressBar? = null
+    private var statusText: TextView? = null
+    private var workerBusy = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         enterImmersiveLandscape()
+        buildDownloadScreen()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) enterImmersiveLandscape()
     }
+
+    override fun onDestroy() {
+        worker.shutdownNow() // any .part file is retained for a later resume
+        super.onDestroy()
+    }
+
+    private fun buildDownloadScreen() {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(28), dp(20), dp(28), dp(20))
+            setBackgroundColor(0xFF101810.toInt())
+        }
+        val scroll = ScrollView(this)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        content.addView(TextView(this).apply {
+            text = "HORIZON RUST MOBILE"
+            textSize = 24f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(0xFFE8F5E9.toInt())
+        })
+        content.addView(TextView(this).apply {
+            text = "Minecraft Java Edition 26.3 — arquivos oficiais"
+            textSize = 16f
+            setTextColor(0xFFB8C9B8.toInt())
+            setPadding(0, dp(8), 0, dp(12))
+        })
+
+        downloadButton = Button(this).apply {
+            text = "Baixar arquivos do Minecraft"
+            setOnClickListener { startMinecraftDownload() }
+        }
+        content.addView(downloadButton)
+
+        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 1000
+            progress = 0
+        }
+        content.addView(progressBar, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(12)
+        ).apply { topMargin = dp(12) })
+
+        statusText = TextView(this).apply {
+            text = "Pronto para verificar os arquivos oficiais da versão 26.3."
+            textSize = 14f
+            setTextColor(0xFFE0E0E0.toInt())
+            setPadding(0, dp(10), 0, dp(16))
+        }
+        content.addView(statusText)
+
+        content.addView(TextView(this).apply {
+            text = "RUNTIME NATIVO ARM64"
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(0xFFE8F5E9.toInt())
+        })
+        content.addView(TextView(this).apply {
+            text = "Pendente: o motor Rust ainda precisa da integração Android, da biblioteca nativa ARM64 e de um pacote de runtime publicado e verificado. Não será baixado um JRE de PC incompatível com Android."
+            textSize = 14f
+            setTextColor(0xFFFFD180.toInt())
+            setPadding(0, dp(8), 0, dp(12))
+        })
+        scroll.addView(content)
+        root.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+        setContentView(root)
+    }
+
+    private fun startMinecraftDownload() {
+        if (workerBusy) return
+        workerBusy = true
+        downloadButton?.isEnabled = false
+        downloadButton?.text = "Preparando download..."
+        progressBar?.progress = 0
+        statusText?.text = "Consultando o manifesto oficial da Mojang..."
+
+        worker.execute {
+            try {
+                val plan = MojangDownloadPlan().resolve()
+                val installer = MinecraftDataInstaller()
+                val destination = File(filesDir, "minecraft/26.3")
+                val installed = installer.install(
+                    plan = plan,
+                    gameDirectory = destination,
+                    isCancelled = { Thread.currentThread().isInterrupted },
+                ) { progress ->
+                    runOnUiThread {
+                        val fraction = if (progress.totalBytes > 0L) {
+                            progress.completedBytes.toDouble() / progress.totalBytes
+                        } else 0.0
+                        progressBar?.progress = (fraction.coerceIn(0.0, 1.0) * 1000).toInt()
+                        val currentMb = progress.fileProgress.downloaded / 1_048_576.0
+                        val totalMb = progress.fileProgress.total.takeIf { it > 0L }?.div(1_048_576.0)
+                        val fileText = if (totalMb != null) {
+                            "${formatMb(currentMb)} / ${formatMb(totalMb)} MB"
+                        } else {
+                            "${formatMb(currentMb)} MB"
+                        }
+                        statusText?.text =
+                            "Baixando e verificando: ${progress.currentPath}\n$fileText\n" +
+                                "${formatMb(progress.completedBytes / 1_048_576.0)} / " +
+                                "${formatMb(progress.totalBytes / 1_048_576.0)} MB"
+                    }
+                }
+                runOnUiThread {
+                    statusText?.text =
+                        "Arquivos oficiais baixados e verificados.\nLocal: ${installed.absolutePath}\n" +
+                            "A preparação do Horizon e o runtime Android ainda são etapas separadas."
+                    progressBar?.progress = 1000
+                }
+            } catch (error: Throwable) {
+                runOnUiThread {
+                    statusText?.text = "Download não concluído: ${error.message ?: error.javaClass.simpleName}"
+                }
+            } finally {
+                runOnUiThread {
+                    workerBusy = false
+                    downloadButton?.isEnabled = true
+                    downloadButton?.text = "Baixar arquivos do Minecraft"
+                }
+            }
+        }
+    }
+
+    private fun formatMb(value: Double): String = String.format(Locale.ROOT, "%.1f", value)
 
     private fun enterImmersiveLandscape() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
