@@ -39,11 +39,12 @@ pub fn android_main(app: AndroidApp) {
     if !resources_ready {
         write_status(
             "preflight_failed",
-            "Manifestos de recursos ausentes ou vazios. Execute novamente Baixar e preparar recursos vanilla.",
+            "Manifestos de recursos ausentes ou vazios. O Horizon continuará para exibir seu diagnóstico de recursos.",
         );
-        return;
+        // Let the engine's own missing/damaged-resource screen explain the problem.
+    } else {
+        write_status("native_preflight_ok", "Os dois manifestos de recursos foram encontrados.");
     }
-    write_status("native_preflight_ok", "Os dois manifestos de recursos foram encontrados.");
 
     let mut args = vec![
         "--home".to_owned(), home.to_string_lossy().into_owned(),
