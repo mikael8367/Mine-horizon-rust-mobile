@@ -68,19 +68,19 @@ class MainActivity : Activity() {
             val detail = lines.drop(1).joinToString(" ").trim()
             statusText?.text = when (stage) {
                 "first_frame_presented" ->
-                    "SUCESSO: a janela do Horizon abriu e apresentou a primeira tela.\\n" +
-                        "A inicialização gráfica foi confirmada; ainda falta testar o gameplay no aparelho.\\n$detail"
+                    "SUCESSO: a janela do Horizon abriu e apresentou a primeira tela.\n" +
+                        "A inicialização gráfica foi confirmada; ainda falta testar o gameplay no aparelho.\n$detail"
                 "boot_renderer_ready" ->
-                    "A janela abriu e o renderer foi inicializado, mas a primeira tela ainda não foi confirmada.\\n$detail"
+                    "A janela abriu e o renderer foi inicializado, mas a primeira tela ainda não foi confirmada.\n$detail"
                 "window_created" ->
-                    "A janela nativa foi criada. O renderer ainda não confirmou a inicialização.\\n$detail"
+                    "A janela nativa foi criada. O renderer ainda não confirmou a inicialização.\n$detail"
                 "window_create_failed" -> "Falha ao criar a janela do jogo: $detail"
                 "renderer_boot_failed" -> "Falha ao inicializar a renderização: $detail"
                 "resource_loading_failed" -> "Falha ao carregar os recursos do jogo: $detail"
                 "event_loop_failed" -> "Falha no loop de eventos Android: $detail"
                 "preflight_failed" -> "Os recursos não passaram na verificação nativa: $detail"
                 "native_preflight_ok", "engine_starting", "event_loop_ready" ->
-                    "O motor foi iniciado, mas ainda não confirmou a criação da janela.\\n$detail"
+                    "O motor foi iniciado, mas ainda não confirmou a criação da janela.\n$detail"
                 "native_entry_started" -> "NativeActivity iniciou, mas o motor não avançou para a validação dos recursos."
                 else -> "O motor nativo foi fechado sem registrar a primeira tela. Confira o log de inicialização."
             }
