@@ -19,11 +19,24 @@ pub fn android_main(app: AndroidApp) {
     let home = data_dir.join("horizon-home");
     let player_dir = data_dir.join("horizon-player");
     let resources = data_dir.join(".local").join("horizon-client").join("26.3");
-    let args = vec![
+    let mut args = vec![
         "--home".to_owned(), home.to_string_lossy().into_owned(),
         "--player-dir".to_owned(), player_dir.to_string_lossy().into_owned(),
         "--resources".to_owned(), resources.to_string_lossy().into_owned(),
     ];
+    // The Android launcher stores only the public offline player name. With no
+    // session file, Horizon uses its normal offline UUID and never claims online auth.
+    let offline_name = data_dir.join("horizon-player-name.txt");
+    if let Ok(name) = std::fs::read_to_string(&offline_name) {
+        let name = name.trim();
+        if !name.is_empty()
+            && name.len() <= 16
+            && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        {
+            args.push("--name".to_owned());
+            args.push(name.to_owned());
+        }
+    }
 
     horizon_client::set_android_app(app);
     horizon_client::entry::main_with_args(Default::default(), args);
