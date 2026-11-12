@@ -4,6 +4,9 @@
 #[cfg(target_os = "android")]
 use winit::platform::android::activity::AndroidApp;
 
+#[global_allocator]
+static ALLOCATOR: horizon_threads::GameAllocator = horizon_threads::GAME_ALLOCATOR;
+
 /// Entry point loaded by Android NativeActivity (see mobile/app/src/main/AndroidManifest.xml).
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
