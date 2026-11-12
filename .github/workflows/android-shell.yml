@@ -93,13 +93,13 @@ jobs:
           readelf -h "$LIB" | grep -E 'Class:.*ELF64'
           readelf -h "$LIB" | grep -E 'Machine:.*AArch64'
 
-          mapfile -t NEEDED < <(readelf -d "$LIB" | grep -o 'Shared library: \\[[^]]*\\]' | cut -d'[' -f2 | tr -d ']')
-          printf 'Native runtime DT_NEEDED dependencies:\\n'
-          printf '  %s\\n' "${NEEDED[@]}"
+          mapfile -t NEEDED < <(readelf -d "$LIB" | grep -o 'Shared library: \[[^]]*\]' | cut -d'[' -f2 | tr -d ']')
+          printf 'Native runtime DT_NEEDED dependencies:\n'
+          printf '  %s\n' "${NEEDED[@]}"
 
           # Rust normally links against Android's platform C runtime. If a future
           # dependency introduces libc++_shared, ship the matching ARM64 NDK copy.
-          if printf '%s\\n' "${NEEDED[@]}" | grep -qx 'libc++_shared.so'; then
+          if printf '%s\n' "${NEEDED[@]}" | grep -qx 'libc++_shared.so'; then
             CXX_RUNTIME="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
             test -s "$CXX_RUNTIME"
             cp "$CXX_RUNTIME" "$LIBDIR/libc++_shared.so"
@@ -133,8 +133,8 @@ jobs:
           SOURCE_DIR="mobile/app/src/main/jniLibs/arm64-v8a"
           MERGED_DIR="mobile/app/build/intermediates/merged_native_libs/debug"
           test -s "$SOURCE_DIR/libhorizon_android.so"
-          mapfile -t SOURCE_LIBS < <(find "$SOURCE_DIR" -maxdepth 1 -type f -name '*.so' -printf '%f\\n' | sort)
-          mapfile -t MERGED_LIBS < <(find "$MERGED_DIR" -type f -path '*/lib/arm64-v8a/*.so' -printf '%f\\n' | sort -u)
+          mapfile -t SOURCE_LIBS < <(find "$SOURCE_DIR" -maxdepth 1 -type f -name '*.so' -printf '%f\n' | sort)
+          mapfile -t MERGED_LIBS < <(find "$MERGED_DIR" -type f -path '*/lib/arm64-v8a/*.so' -printf '%f\n' | sort -u)
           if [ "${SOURCE_LIBS[*]}" != "${MERGED_LIBS[*]}" ]; then
             echo "Source and Gradle-merged ARM64 native libraries differ."
             echo "Source: ${SOURCE_LIBS[*]}"
