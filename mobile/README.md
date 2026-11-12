@@ -48,7 +48,7 @@ tested before full game-data preparation can be claimed.
   memory, checks exact file sizes, and finalizes verified files atomically.
 - The download button is connected to this pipeline. It does not mark the game
   prepared and does not enable Play.
-- Microsoft device-code sign-in/entitlement, Android native runtime packaging,
+- ARM64 Android target cross-check workflow added; app-loadable native engine packaging, Microsoft device-code sign-in/entitlement,
   Java-25-compatible resource preparation, SAF folder selection, and gameplay
   integration remain incomplete.
 - Never create an APK unless the maintainer explicitly requests one.
