@@ -53,14 +53,17 @@ class VanillaResourcePreparer(private val context: Context) {
         }
 
         val preparer = File(appFiles, "bin/horizon-prepare")
-        if (!preparer.isFile) {
-            preparer.parentFile?.mkdirs()
-            context.assets.open("bin/horizon-prepare").use { input ->
-                FileOutputStream(preparer).use { outputStream -> input.copyTo(outputStream) }
-            }
-            check(preparer.setExecutable(true, true)) {
-                "O Android não permitiu habilitar o executável de preparação"
-            }
+        preparer.parentFile?.mkdirs()
+        val stagedPreparer = File(preparer.parentFile, "horizon-prepare.new")
+        context.assets.open("bin/horizon-prepare").use { input ->
+            FileOutputStream(stagedPreparer).use { outputStream -> input.copyTo(outputStream) }
+        }
+        stagedPreparer.setExecutable(true, true)
+        if (preparer.exists()) check(preparer.delete()) {
+            "Não foi possível atualizar o executável de preparação"
+        }
+        check(stagedPreparer.renameTo(preparer) && preparer.setExecutable(true, true)) {
+            "Não foi possível ativar o executável de preparação"
         }
         check(preparer.canExecute()) { "O executável horizon-prepare não pode ser iniciado" }
         require(File(root, "research-lock.json").isFile &&
@@ -144,12 +147,18 @@ class VanillaResourcePreparer(private val context: Context) {
     }
 
     private fun installSupportFiles(destination: File) {
-        if (File(destination, "research-lock.json").isFile) return
+        val lock = File(destination, "research-lock.json")
+        val parity = File(destination, "mods/horizon/src/test/java/dev/horizonlab/parity")
+        val exporter = File(destination, "crates/horizon-prepare/src/exporters.rs")
+        if (lock.isFile && parity.isDirectory && exporter.isFile) return
+        if (destination.exists()) check(destination.deleteRecursively()) {
+            "Não foi possível reparar o pacote de suporte incompleto"
+        }
         check(destination.mkdirs() || destination.isDirectory) {
             "Não foi possível criar a pasta de suporte do preparador"
         }
         copyAssetTree("prepare-root", destination)
-        require(File(destination, "research-lock.json").isFile) {
+        require(lock.isFile && parity.isDirectory && exporter.isFile) {
             "Pacote de suporte vanilla incompleto"
         }
     }
