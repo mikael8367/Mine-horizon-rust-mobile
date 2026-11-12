@@ -11,11 +11,20 @@ static ALLOCATOR: horizon_threads::GameAllocator = horizon_threads::GAME_ALLOCAT
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
-    // Keep Horizon's default game directory inside this app's private storage.
-    if let Some(data_dir) = app.internal_data_path() {
-        let _ = std::fs::create_dir_all(&data_dir);
-        let _ = std::env::set_current_dir(data_dir);
-    }
+    // Keep all mutable game state and prepared resources inside this app's private storage.
+    let data_dir = app.internal_data_path().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let _ = std::fs::create_dir_all(&data_dir);
+    let _ = std::env::set_current_dir(&data_dir);
+
+    let home = data_dir.join("horizon-home");
+    let player_dir = data_dir.join("horizon-player");
+    let resources = data_dir.join(".local").join("horizon-client").join("26.3");
+    let args = vec![
+        "--home".to_owned(), home.to_string_lossy().into_owned(),
+        "--player-dir".to_owned(), player_dir.to_string_lossy().into_owned(),
+        "--resources".to_owned(), resources.to_string_lossy().into_owned(),
+    ];
+
     horizon_client::set_android_app(app);
-    horizon_client::entry::main();
+    horizon_client::entry::main_with_args(Default::default(), args);
 }
