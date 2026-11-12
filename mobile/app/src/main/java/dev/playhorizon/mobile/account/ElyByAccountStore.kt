@@ -29,54 +29,54 @@ class ElyByAccountStore(private val directory: File) {
 
     fun signIn(username: String, password: CharArray): Profile {
         try {
-        require(username.isNotBlank()) { "Informe o usuário ou e-mail Ely.by." }
-        require(password.isNotEmpty()) { "Informe a senha Ely.by." }
-        val clientToken = java.util.UUID.randomUUID().toString()
-        val body = JSONObject().apply {
-            put("agent", JSONObject().put("name", "Minecraft").put("version", 1))
-            put("username", username)
-            put("password", String(password))
-            put("clientToken", clientToken)
-            put("requestUser", true)
-        }.toString()
-        val connection = (URL(AUTH_URL).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            instanceFollowRedirects = false
-            connectTimeout = 15000
-            readTimeout = 20000
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            setRequestProperty("Accept", "application/json")
-        }
-        val response = try {
-            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val responseText = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (status !in 200..299) {
-                val message = runCatching { JSONObject(responseText).optString("errorMessage") }.getOrNull()
-                error(message?.takeIf { it.isNotBlank() } ?: "Ely.by recusou o login (HTTP $status).")
+            require(username.isNotBlank()) { "Informe o usuário ou e-mail Ely.by." }
+            require(password.isNotEmpty()) { "Informe a senha Ely.by." }
+            val clientToken = java.util.UUID.randomUUID().toString()
+            val body = JSONObject().apply {
+                put("agent", JSONObject().put("name", "Minecraft").put("version", 1))
+                put("username", username)
+                put("password", String(password))
+                put("clientToken", clientToken)
+                put("requestUser", true)
+            }.toString()
+            val connection = (URL(AUTH_URL).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                instanceFollowRedirects = false
+                connectTimeout = 15000
+                readTimeout = 20000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
             }
-            JSONObject(responseText)
-        } finally {
-            connection.disconnect()
-        }
-        val token = response.optString("accessToken").takeIf { it.isNotBlank() }
-            ?: error("Ely.by não retornou um token de sessão.")
-        val profile = response.optJSONObject("selectedProfile")
-            ?: error("Ely.by não retornou o perfil Minecraft.")
-        val name = profile.optString("name")
-        val uuid = profile.optString("id").replace("-", "")
-        require(name.matches(Regex("[A-Za-z0-9_]{1,16}"))) { "Nome de perfil Ely.by inválido." }
-        require(uuid.matches(Regex("[a-fA-F0-9]{32}"))) { "UUID de perfil Ely.by inválido." }
-        val returnedClientToken = response.optString("clientToken").takeIf { it.isNotBlank() } ?: clientToken
-        val account = JSONObject()
-            .put("name", name)
-            .put("uuid", uuid)
-            .put("access_token", token)
-            .put("client_token", returnedClientToken)
-        writeEncrypted(account.toString().toByteArray(Charsets.UTF_8))
-        return Profile(name, uuid)
+            val response = try {
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                val responseText = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                if (status !in 200..299) {
+                    val message = runCatching { JSONObject(responseText).optString("errorMessage") }.getOrNull()
+                    error(message?.takeIf { it.isNotBlank() } ?: "Ely.by recusou o login (HTTP $status).")
+                }
+                JSONObject(responseText)
+            } finally {
+                connection.disconnect()
+            }
+            val token = response.optString("accessToken").takeIf { it.isNotBlank() }
+                ?: error("Ely.by não retornou um token de sessão.")
+            val profile = response.optJSONObject("selectedProfile")
+                ?: error("Ely.by não retornou o perfil Minecraft.")
+            val name = profile.optString("name")
+            val uuid = profile.optString("id").replace("-", "")
+            require(name.matches(Regex("[A-Za-z0-9_]{3,16}"))) { "Nome de perfil Ely.by inválido." }
+            require(uuid.matches(Regex("[a-fA-F0-9]{32}"))) { "UUID de perfil Ely.by inválido." }
+            val returnedClientToken = response.optString("clientToken").takeIf { it.isNotBlank() } ?: clientToken
+            val account = JSONObject()
+                .put("name", name)
+                .put("uuid", uuid)
+                .put("access_token", token)
+                .put("client_token", returnedClientToken)
+            writeEncrypted(account.toString().toByteArray(Charsets.UTF_8))
+            return Profile(name, uuid)
         } finally {
             password.fill('\u0000')
         }
