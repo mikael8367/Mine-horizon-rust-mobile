@@ -94,12 +94,18 @@ class MainActivity : Activity() {
         content.addView(downloadAction)
 
         content.addView(Button(this).apply {
-            text = "Testar motor Rust em tela cheia"
+            text = "Abrir motor Rust em tela cheia"
             setOnClickListener {
                 val nativeLibrary = File(applicationInfo.nativeLibraryDir, "libhorizon_android.so")
                 if (!nativeLibrary.isFile) {
                     statusText?.text = "Biblioteca ARM64 ainda não foi incluída. Aguarde a compilação do CI."
                     return@setOnClickListener
+                }
+                val preparedManifest = File(filesDir, ".local/horizon-client/26.3/horizon-resources.json")
+                statusText?.text = if (preparedManifest.isFile) {
+                    "Recursos preparados encontrados. Abrindo o motor Rust ARM64..."
+                } else {
+                    "Motor Rust ARM64 encontrado. Os arquivos oficiais baixados ainda precisam ser preparados; abrindo a tela de diagnóstico do motor."
                 }
                 try {
                     nativeEngineOpened = true
@@ -147,7 +153,7 @@ class MainActivity : Activity() {
             setTextColor(0xFFE8F5E9.toInt())
         })
         content.addView(TextView(this).apply {
-            text = "Pendente: o motor Rust ainda precisa da integração Android, da biblioteca nativa ARM64 e de um pacote de runtime publicado e verificado. Não será baixado um JRE de PC incompatível com Android."
+            text = "O motor Rust ARM64 e a integração NativeActivity já são compilados e empacotados pelo CI. O jogo não usa JRE de PC. Ainda falta preparar os recursos vanilla exigidos pelo Horizon e validar a renderização em um aparelho Android real."
             textSize = 14f
             setTextColor(0xFFFFD180.toInt())
             setPadding(0, dp(8), 0, dp(12))
@@ -199,7 +205,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     statusText?.text =
                         "Arquivos oficiais baixados e verificados.\nLocal: ${installed.absolutePath}\n" +
-                            "A preparação do Horizon e o runtime Android ainda são etapas separadas."
+                            "Os arquivos estão prontos, mas ainda não são recursos preparados do Horizon. A preparação vanilla é uma etapa separada."
                     progressBar?.progress = 1000
                 }
             } catch (error: Throwable) {
