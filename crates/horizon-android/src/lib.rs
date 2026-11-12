@@ -72,6 +72,7 @@ pub fn android_main(app: AndroidApp) {
         args.push(session_file.to_string_lossy().into_owned());
     }
 
+    write_status("engine_starting", "Entrando no loop principal do Horizon.");
     horizon_client::set_android_app(app);
     horizon_client::entry::main_with_args(Default::default(), args);
 }
