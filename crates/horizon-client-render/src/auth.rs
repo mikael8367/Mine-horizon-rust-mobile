@@ -1,4 +1,4 @@
-//! The Microsoft account the launcher signed in, handed over in a session
+//! The account the launcher signed in, handed over in a session
 //! file (docs/microsoft-account.md), and the Minecraft services call
 //! online-mode servers need: authlib's MinecraftServicesSessionService.joinServer
 //! through the services discovery document. The access token stays in this
@@ -62,7 +62,7 @@ impl AuthSession {
     pub fn access_token(&self) -> &str {
         &self.access_token
     }
-    /// The session file's JSON: {"name", "uuid", "access_token", "user_type": "msa", "xuid"}.
+    /// The session file's JSON: {"name", "uuid", "access_token", "user_type": "msa" | "ely.by", "xuid"}.
     pub fn parse(text: &str) -> Result<Self, String> {
         let v: serde_json::Value =
             serde_json::from_str(text).map_err(|_| "the session is not valid JSON")?;
