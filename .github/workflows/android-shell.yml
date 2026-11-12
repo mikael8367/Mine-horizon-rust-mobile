@@ -11,6 +11,9 @@ on:
       - "crates/horizon-client-lib/**"
       - "crates/horizon-client-input/**"
       - "crates/horizon-client-render/**"
+      - "crates/horizon-prepare/**"
+      - "mods/horizon/src/test/java/dev/horizonlab/parity/**"
+      - "research-lock.json"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/android-shell.yml"
@@ -56,6 +59,23 @@ jobs:
           echo "AR_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> "$GITHUB_ENV"
       - name: Build Horizon Rust renderer for Android ARM64
         run: cargo build --release --target aarch64-linux-android -p horizon-android
+      - name: Build Horizon vanilla preparer for Android ARM64
+        run: cargo build --release --target aarch64-linux-android -p horizon-prepare
+      - name: Stage Android preparer and Horizon-only support sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p mobile/app/src/main/assets/bin
+          mkdir -p mobile/app/src/main/assets/prepare-root/crates/horizon-prepare/src
+          mkdir -p mobile/app/src/main/assets/prepare-root/mods/horizon/src/test/java/dev/horizonlab
+          install -m 0755 target/aarch64-linux-android/release/horizon-prepare mobile/app/src/main/assets/bin/horizon-prepare
+          cp research-lock.json mobile/app/src/main/assets/prepare-root/research-lock.json
+          cp crates/horizon-prepare/src/exporters.rs mobile/app/src/main/assets/prepare-root/crates/horizon-prepare/src/exporters.rs
+          cp -a mods/horizon/src/test/java/dev/horizonlab/parity mobile/app/src/main/assets/prepare-root/mods/horizon/src/test/java/dev/horizonlab/
+          test -x mobile/app/src/main/assets/bin/horizon-prepare
+          test -s mobile/app/src/main/assets/prepare-root/research-lock.json
+          test -s mobile/app/src/main/assets/prepare-root/crates/horizon-prepare/src/exporters.rs
+          test -d mobile/app/src/main/assets/prepare-root/mods/horizon/src/test/java/dev/horizonlab/parity
       - name: Stage native renderer for Android packaging
         shell: bash
         run: |
@@ -75,7 +95,7 @@ jobs:
           gradle-version: "8.9"
       - name: Compile Android shell and merge native library (no APK)
         working-directory: mobile
-        run: gradle --no-daemon :app:compileDebugKotlin :app:processDebugManifest :app:mergeDebugNativeLibs
+        run: gradle --no-daemon :app:compileDebugKotlin :app:processDebugManifest :app:mergeDebugNativeLibs :app:mergeDebugAssets
       - name: Verify ARM64 library was merged for Android packaging
         shell: bash
         run: |
