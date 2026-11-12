@@ -8,8 +8,16 @@ fn android_startup_status(stage: &str, detail: &str) {
     #[cfg(target_os = "android")]
     {
         let Ok(directory) = std::env::current_dir() else { return };
-        let path = directory.join("horizon-startup-status.txt");
-        let temporary = directory.join("horizon-startup-status.txt.part");
+        // NativeActivity switches cwd to horizon-game for vanilla world saves,
+        // while MainActivity reads diagnostics from the app's internal_data_path.
+        // Keep later renderer milestones beside the launcher's status file.
+        let status_directory = if directory.file_name().is_some_and(|name| name == "horizon-game") {
+            directory.parent().unwrap_or(&directory)
+        } else {
+            directory.as_path()
+        };
+        let path = status_directory.join("horizon-startup-status.txt");
+        let temporary = status_directory.join("horizon-startup-status.txt.part");
         let contents = format!("{stage}\n{detail}\n");
         if std::fs::write(&temporary, contents).is_ok() {
             let _ = std::fs::rename(temporary, path);
