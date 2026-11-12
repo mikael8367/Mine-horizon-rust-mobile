@@ -6,6 +6,7 @@ on:
     paths:
       - "mobile/**"
       - "crates/horizon-android/**"
+      - "crates/horizon-threads/**"
       - "crates/horizon-client/**"
       - "crates/horizon-client-lib/**"
       - "crates/horizon-client-input/**"
