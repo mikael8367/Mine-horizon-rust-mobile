@@ -24,6 +24,7 @@ fn is_input(event: &WindowEvent) -> bool {
             | WindowEvent::MouseInput { .. }
             | WindowEvent::MouseWheel { .. }
             | WindowEvent::CursorMoved { .. }
+            | WindowEvent::Touch(_)
             | WindowEvent::Ime(_)
     )
 }
@@ -403,7 +404,7 @@ mod tests {
     use super::*;
     use input_trace::InputOrigin;
     use winit::dpi::{PhysicalPosition, PhysicalSize};
-    use winit::event::{Ime, Modifiers, TouchPhase};
+    use winit::event::{Ime, Modifiers, Touch, TouchPhase};
     use winit::keyboard::ModifiersState;
 
     // A key's `KeyEvent` can't be made outside winit; these are the person's other inputs.
@@ -424,6 +425,13 @@ mod tests {
                 device_id,
                 position: PhysicalPosition::new(10.0, 20.0),
             },
+            WindowEvent::Touch(Touch {
+                device_id,
+                id: 7,
+                phase: TouchPhase::Started,
+                location: PhysicalPosition::new(10.0, 20.0),
+                force: None,
+            }),
             WindowEvent::ModifiersChanged(Modifiers::from(ModifiersState::empty())),
             WindowEvent::Ime(Ime::Commit("a".into())),
         ]
