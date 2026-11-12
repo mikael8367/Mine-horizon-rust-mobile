@@ -37,6 +37,13 @@ pub fn android_main(app: AndroidApp) {
             args.push(name.to_owned());
         }
     }
+    // A fresh one-use Ely.by session is created by MainActivity immediately
+    // before opening NativeActivity. AuthSession consumes and deletes it.
+    let session_file = data_dir.join("horizon-session.json");
+    if session_file.is_file() {
+        args.push("--session-file".to_owned());
+        args.push(session_file.to_string_lossy().into_owned());
+    }
 
     horizon_client::set_android_app(app);
     horizon_client::entry::main_with_args(Default::default(), args);
