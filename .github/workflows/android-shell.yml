@@ -26,6 +26,10 @@ on:
       - ".github/workflows/android-shell.yml"
   workflow_dispatch:
 
+concurrency:
+  group: android-mobile-shell-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
