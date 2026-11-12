@@ -5,6 +5,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.StandardCopyOption
 import java.security.DigestInputStream
 import java.security.MessageDigest
@@ -148,12 +149,17 @@ class VerifiedDownloader(
     }
 
     private fun finalizeFile(part: File, destination: File) {
-        Files.move(
-            part.toPath(),
-            destination.toPath(),
-            StandardCopyOption.REPLACE_EXISTING,
-            StandardCopyOption.ATOMIC_MOVE,
-        )
+        try {
+            Files.move(
+                part.toPath(),
+                destination.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            // The file is already fully verified; same-directory replacement is safe as fallback.
+            Files.move(part.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 
     private fun isAllowedHost(host: String): Boolean = host.lowercase() in setOf(
