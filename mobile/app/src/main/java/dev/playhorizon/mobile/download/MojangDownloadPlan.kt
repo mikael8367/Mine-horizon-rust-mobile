@@ -71,6 +71,13 @@ class MojangDownloadPlan {
         require(versionJson.optString("id") == VERSION) { "Mojang returned unexpected game version metadata" }
 
         val artifacts = mutableListOf<Artifact>()
+        artifacts += Artifact(
+            relativePath = "versions/$VERSION/$VERSION.json",
+            url = metadataUrl,
+            sha1 = versionSha1,
+            size = versionText.toByteArray(Charsets.UTF_8).size.toLong(),
+            role = "version-json",
+        )
         val downloads = versionJson.getJSONObject("downloads")
         artifacts += artifact(downloads.getJSONObject("client"), "versions/$VERSION/$VERSION.jar", "client", CLIENT_SHA1)
         artifacts += artifact(downloads.getJSONObject("server"), "versions/$VERSION/$VERSION-server.jar", "server", SERVER_SHA1)
