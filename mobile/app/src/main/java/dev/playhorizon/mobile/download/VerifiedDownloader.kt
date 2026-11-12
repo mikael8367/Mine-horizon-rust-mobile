@@ -74,7 +74,7 @@ class VerifiedDownloader(
                     connect()
                 }
                 val code = connection.responseCode
-                if (code == HttpURLConnection.HTTP_REQUESTED_RANGE_NOT_SATISFIABLE &&
+                if (code == 416 &&
                     part.exists() && !restartedAfterRangeFailure
                 ) {
                     if (!part.delete()) error("Cannot restart invalid partial download")
