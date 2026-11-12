@@ -126,8 +126,9 @@ class VerifiedDownloader(
                 part.delete()
                 error("Size mismatch: expected $expectedSize bytes, got $actualSize")
             }
-            require(matchesDigest(part, normalizedAlgorithm, expectedDigest)) {
-                "Checksum mismatch for downloaded file"
+            if (!matchesDigest(part, normalizedAlgorithm, expectedDigest)) {
+                part.delete()
+                error("Checksum mismatch for downloaded file")
             }
             finalizeFile(part, destination)
             return destination
