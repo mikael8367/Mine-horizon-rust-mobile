@@ -61,6 +61,7 @@ class VerifiedDownloader(
         var connection: HttpURLConnection? = null
         try {
             var redirects = 0
+            var restartedAfterRangeFailure = false
             while (true) {
                 connection = (currentUrl.openConnection() as HttpURLConnection).apply {
                     connectTimeout = connectTimeoutMs
@@ -73,6 +74,15 @@ class VerifiedDownloader(
                     connect()
                 }
                 val code = connection.responseCode
+                if (code == HttpURLConnection.HTTP_REQUESTED_RANGE_NOT_SATISFIABLE &&
+                    part.exists() && !restartedAfterRangeFailure
+                ) {
+                    if (!part.delete()) error("Cannot restart invalid partial download")
+                    connection.disconnect()
+                    connection = null
+                    restartedAfterRangeFailure = true
+                    continue
+                }
                 if (code !in 300..399) break
                 if (redirects++ >= 5) error("Too many download redirects")
                 val location = connection.getHeaderField("Location") ?: error("Redirect without Location")
