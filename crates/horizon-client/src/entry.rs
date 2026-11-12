@@ -8,6 +8,11 @@ pub fn main() {
 
 /// Start the game with trait mods in dispatch order.
 pub fn main_with(mods: crate::mod_api::Mods) {
+    main_with_args(mods, std::env::args().skip(1).collect());
+}
+
+/// Start the game with explicit arguments supplied by an embedding host such as Android.
+pub fn main_with_args(mods: crate::mod_api::Mods, args: Vec<String>) {
     // First: a trait injection into anything below (logging, the crash handler) calls its mod.
     if crate::mod_api::MODS.set(mods).is_err() {
         log::warn!("Trait mods already installed; ignoring the second list");
@@ -33,7 +38,6 @@ pub fn main_with(mods: crate::mod_api::Mods) {
     // The text crates ship (`horizon_hooks::lang`), loaded with the game's own languages.
     horizon_client::lang::install_crate_files(horizon_hooks::lang::engine::all());
     horizon_client::spans::startup::init(std::time::Instant::now());
-    let args: Vec<String> = std::env::args().skip(1).collect();
     let game_args = args.iter().take_while(|a| *a != "--dedicated");
     let help = game_args
         .clone()
