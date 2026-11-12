@@ -37,7 +37,7 @@ class VanillaResourcePreparer(private val context: Context) {
         }
         val jdkHome = AndroidJdkInstaller().install(
             filesDir = appFiles,
-            isCancelled = isCancelled,
+            isCancelled = { isCancelled() },
             onProgress = { p ->
                 val total = p.total.takeIf { it > 0L }
                 onProgress(Progress(
