@@ -1,0 +1,58 @@
+name: Android ARM64 native engine check
+
+on:
+  push:
+    branches: [mobile/android-port]
+    paths:
+      - "crates/horizon-client-render/**"
+      - "crates/horizon-client-input/**"
+      - "crates/horizon-client-core/**"
+      - "crates/horizon-client-lib/**"
+      - "crates/horizon-client/**"
+      - "crates/horizon-threads/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/android-native-check.yml"
+  pull_request:
+    paths:
+      - "crates/horizon-client-render/**"
+      - "crates/horizon-client-input/**"
+      - "crates/horizon-client-core/**"
+      - "crates/horizon-client-lib/**"
+      - "crates/horizon-client/**"
+      - "crates/horizon-threads/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/android-native-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-arm64-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install Android NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "ndk;27.2.12479018"
+
+      - name: Configure Android linker
+        shell: bash
+        run: |
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" >> "$GITHUB_ENV"
+
+      - name: Check Android ARM64 renderer and input crates
+        run: cargo check --locked --lib --target aarch64-linux-android -p horizon-client-render -p horizon-client-input -p horizon-client-core
