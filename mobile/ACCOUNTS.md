@@ -9,7 +9,9 @@ The Android launcher supports two selectable player modes:
 
 - An online-mode server must be configured with Ely.by-compatible authentication (for example, the server-side Authlib integration). A server that only trusts Mojang/Microsoft sessions will reject Ely.by accounts.
 - Ely.by chat profile-key signing is not implemented in this Android integration. Servers enforcing secure chat may limit chat for Ely.by sessions.
+- The launcher provides a disconnect action that removes the encrypted account, pending session file, and Android Keystore key.
 - If the Ely.by token expires or is revoked, sign in again in the launcher. Automatic Yggdrasil token refresh and two-factor-code UI are not included yet.
+- Direct Yggdrasil authentication does not require an OAuth client ID, client secret, or API key. An OAuth-based sign-in would require a separately registered Ely.by application.
 - Microsoft login is intentionally not required. It remains a separate optional provider and is not enabled by this Android account screen.
 
 The account session file is temporary and is not intended to be copied, backed up, or shared. Never put account passwords or access tokens in issue reports or logs.
