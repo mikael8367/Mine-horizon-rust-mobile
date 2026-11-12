@@ -60,8 +60,10 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (nativeEngineOpened) {
+        val startupPreferences = getSharedPreferences("horizon_launcher", MODE_PRIVATE)
+        if (nativeEngineOpened || startupPreferences.getBoolean("native_launch_pending", false)) {
             nativeEngineOpened = false
+            startupPreferences.edit().putBoolean("native_launch_pending", false).apply()
             val statusFile = File(filesDir, "horizon-startup-status.txt")
             val lines = runCatching { statusFile.readLines(Charsets.UTF_8) }.getOrDefault(emptyList())
             val stage = lines.firstOrNull().orEmpty()
@@ -337,6 +339,8 @@ class MainActivity : Activity() {
                     }
                     File(filesDir, "horizon-startup-status.txt").delete()
                     File(filesDir, "horizon-startup-status.txt.part").delete()
+                    getSharedPreferences("horizon_launcher", MODE_PRIVATE).edit()
+                        .putBoolean("native_launch_pending", true).apply()
                     nativeEngineOpened = true
                     startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
                 } catch (error: Throwable) {
