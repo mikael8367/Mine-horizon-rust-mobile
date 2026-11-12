@@ -14,11 +14,19 @@ pub const DEFAULT_DISCOVERY: &str = "https://discovery.minecraftservices.com/min
 /// A session file older than this is refused: it can't be replayed later.
 const MAX_SESSION_FILE_AGE: Duration = Duration::from_secs(120);
 
-/// A signed-in account (vanilla's User with type msa).
+/// Authentication provider used by the session and online-mode handshake.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuthProvider {
+    Microsoft,
+    ElyBy,
+}
+
+/// An authenticated account handed over by the launcher.
 pub struct AuthSession {
     pub name: String,
     pub uuid: u128,
     pub xuid: Option<String>,
+    provider: AuthProvider,
     access_token: String,
 }
 impl std::fmt::Debug for AuthSession {
@@ -46,6 +54,7 @@ impl AuthSession {
             name: name.to_owned(),
             uuid,
             xuid: None,
+            provider: AuthProvider::Microsoft,
             access_token: access_token.to_owned(),
         }
     }
@@ -68,13 +77,16 @@ impl AuthSession {
         let access_token = field("access_token")
             .filter(|t| !t.is_empty())
             .ok_or("the session has no access token")?;
-        if field("user_type").is_some_and(|t| t != "msa") {
-            return Err("the session is not a Microsoft account session".into());
-        }
+        let provider = match field("user_type").unwrap_or("msa") {
+            "msa" => AuthProvider::Microsoft,
+            "ely.by" => AuthProvider::ElyBy,
+            _ => return Err("the session provider is not supported".into()),
+        };
         Ok(Self {
             name: name.to_owned(),
             uuid,
             xuid: field("xuid").map(str::to_owned),
+            provider,
             access_token: access_token.to_owned(),
         })
     }
@@ -236,6 +248,9 @@ pub fn endpoint(doc: &serde_json::Value, service: &str, name: &str) -> Option<St
 /// to no actions, as vanilla does. Blocks: call it off the main thread.
 pub fn fetch_account_status(session: &AuthSession) -> crate::ban_notice::AccountStatus {
     use crate::ban_notice::{AccountStatus, parse_profile_actions, parse_properties};
+    if session.provider != AuthProvider::Microsoft {
+        return AccountStatus::default();
+    }
     let Ok(doc) = discovery() else {
         return AccountStatus::default();
     };
@@ -306,6 +321,28 @@ pub fn join_server(session: &AuthSession, server_hash: &str) -> Result<(), JoinE
 }
 
 fn join_server_once(session: &AuthSession, server_hash: &str) -> Result<(), JoinError> {
+    if session.provider == AuthProvider::ElyBy {
+        const ELY_BY_JOIN: &str = "https://sessionserver.ely.by/session/minecraft/join";
+        return match agent()
+            .post(ELY_BY_JOIN)
+            .set("Content-Type", "application/json; charset=utf-8")
+            .send_string(&serde_json::json!({
+                "accessToken": session.access_token,
+                "selectedProfile": format!("{:032x}", session.uuid),
+                "serverId": server_hash,
+            }).to_string())
+        {
+            Ok(_) => Ok(()),
+            Err(ureq::Error::Status(status, response)) => Err(JoinError::from_response(
+                status,
+                &response.into_string().unwrap_or_default(),
+            )),
+            Err(ureq::Error::Transport(error)) => {
+                log::warn!("Ely.by session join: {error}");
+                Err(JoinError::Unavailable)
+            }
+        };
+    }
     let doc = discovery()?;
     let url = endpoint(&doc, "session", "join").ok_or(JoinError::Unavailable)?;
     match agent()
@@ -428,6 +465,9 @@ pub fn parse_certificates(body: &str) -> Option<ChatKeyPair> {
 /// UserApiService.getKeyPair: the certificates endpoint, POSTed with the
 /// access token.
 pub fn fetch_chat_keys(session: &AuthSession) -> Result<ChatKeyPair, JoinError> {
+    if session.provider != AuthProvider::Microsoft {
+        return Err(JoinError::Other("Chat signing is not available for Ely.by sessions".into()));
+    }
     let doc = discovery()?;
     let url = endpoint(&doc, "player", "getCertificates").ok_or(JoinError::Unavailable)?;
     let body = match agent()
