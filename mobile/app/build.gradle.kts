@@ -15,6 +15,19 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+
+        // This port currently ships only the Rust engine built for Android ARM64.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
+    }
+
+    // Extract JNI libraries into nativeLibraryDir. NativeActivity loads
+    // libhorizon_android.so through Android's native-library loader.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     compileOptions {
