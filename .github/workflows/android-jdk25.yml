@@ -26,25 +26,70 @@ jobs:
           ref: Build_JRE_25
           path: android-openjdk
 
-      - name: Patch Android ifaddrs declarations for OpenJDK HotSpot
+      - name: Patch Android getifaddrs compatibility after upstream reset
         working-directory: android-openjdk
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p = Path("build_jdk.sh")
-          s = p.read_text()
-          anchor = "git reset --hard"
-          patch = anchor + chr(10) + """if ! grep -q '^#include <ifaddrs.h>' src/hotspot/os/linux/os_perf_linux.cpp; then
-            sed -i '1i#include <ifaddrs.h>' src/hotspot/os/linux/os_perf_linux.cpp
-          fi
-          """
-          if anchor not in s:
-              raise SystemExit("Não encontrei o ponto seguro para aplicar o patch no build_jdk.sh")
-          p.write_text(s.replace(anchor, patch, 1))
-          PY
 
+          script = Path("build_jdk.sh")
+          text = script.read_text()
+          anchor = 'git apply --reject --whitespace=fix ../patches/jdk25u_android.diff || echo "git apply failed (Android patch set)"'
+          fallback = r'''git apply --reject --whitespace=fix ../patches/jdk25u_android.diff || echo "git apply failed (Android patch set)"
+          # The upstream patch's os_perf_linux.cpp hunk can drift as jdk25u changes.
+          # Reapply that Android-only compatibility block by a stable include anchor.
+          python3 - <<'PY_ANDROID_IFADDRS'
+          from pathlib import Path
+
+          source = Path("src/hotspot/os/linux/os_perf_linux.cpp")
+          patch = Path("../patches/jdk25u_android.diff")
+          code = source.read_text()
+          diff = patch.read_text()
+          marker = "int getifaddrs(ifaddrs** out)"
+          section_start = diff.index("diff --git a/src/hotspot/os/linux/os_perf_linux.cpp")
+          hunk_start = diff.index("@@", section_start)
+          next_file = diff.find("\ndiff --git ", hunk_start)
+          hunk = diff[hunk_start: next_file if next_file >= 0 else len(diff)]
+          added = "\n".join(line[1:] for line in hunk.splitlines() if line.startswith("+") and not line.startswith("+++"))
+          if marker not in code:
+              include = "#include <ifaddrs.h>"
+              if code.count(include) != 1:
+                  raise SystemExit("Expected exactly one ifaddrs include in os_perf_linux.cpp")
+              code = code.replace(include, added, 1)
+          # Fix allocator ownership in the imported Android netlink implementation.
+          code = code.replace(
+              "ifaddrs_storage *storage = nullptr;\n  memset(storage, 0, sizeof(*storage));",
+              "ifaddrs_storage *storage = NEW_C_HEAP_OBJ(ifaddrs_storage, mtInternal);\n"
+              "  if (storage == nullptr) return nullptr;\n"
+              "  memset(storage, 0, sizeof(*storage));"
+          )
+          code = code.replace("    free(current);", "    FREE_C_HEAP_OBJ(reinterpret_cast<ifaddrs_storage*>(current));")
+          code = code.replace(
+              "ifaddrs_storage* new_addr = new_ifaddrs_storage(out);\n    new_addr->interface_index",
+              "ifaddrs_storage* new_addr = new_ifaddrs_storage(out);\n"
+              "    if (new_addr == nullptr) return;\n"
+              "    new_addr->interface_index"
+          )
+          code = code.replace(
+              "ifaddrs_storage* new_addr = new_ifaddrs_storage(out);\n    // We can just copy",
+              "ifaddrs_storage* new_addr = new_ifaddrs_storage(out);\n"
+              "    if (new_addr == nullptr) return;\n"
+              "    // We can just copy"
+          )
+          if marker not in code or "NEW_C_HEAP_OBJ(ifaddrs_storage, mtInternal)" not in code or "FREE_C_HEAP_OBJ(reinterpret_cast<ifaddrs_storage*>(current))" not in code:
+              raise SystemExit("Android getifaddrs compatibility patch validation failed")
+          source.write_text(code)
+          PY_ANDROID_IFADDRS
+          '''
+          if anchor not in text:
+              raise SystemExit("Could not find Android patch application command in build_jdk.sh")
+          if "PY_ANDROID_IFADDRS" not in text:
+              text = text.replace(anchor, fallback, 1)
+              script.write_text(text)
+          PY
+          
       - name: Build full OpenJDK 25 for Android ARM64
         working-directory: android-openjdk
         shell: bash
