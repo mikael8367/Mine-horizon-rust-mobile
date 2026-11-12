@@ -236,6 +236,28 @@ class MainActivity : Activity() {
                 .putString("account_mode", selectedAccountMode).apply()
         }
         content.addView(accountModes)
+        content.addView(Button(this).apply {
+            text = "Desconectar conta Ely.by"
+            isEnabled = elyStore.hasAccount()
+            setOnClickListener {
+                if (workerBusy) return@setOnClickListener
+                try {
+                    elyStore.signOut()
+                    selectedAccountMode = "offline"
+                    getSharedPreferences("horizon_launcher", MODE_PRIVATE).edit()
+                        .putString("account_mode", "offline").apply()
+                    accountModes.check(offlineOption.id)
+                    elyPassword.text?.clear()
+                    elyUsername.text?.clear()
+                    elyAction.text = "Entrar com Ely.by"
+                    isEnabled = false
+                    statusText?.text = "Conta Ely.by desconectada. Token, sessão temporária e chave local foram removidos."
+                } catch (error: Throwable) {
+                    statusText?.text = "Falha ao desconectar Ely.by: ${error.message ?: error.javaClass.simpleName}"
+                }
+            }
+        })
+
 
         val downloadAction = Button(this).apply {
             text = "Baixar arquivos do Minecraft"
