@@ -104,6 +104,18 @@ class ElyByAccountStore(private val directory: File) {
         return target
     }
 
+    /** Removes the encrypted account, pending one-use session and Keystore key. */
+    fun signOut() {
+        listOf(ACCOUNT_FILE, "$ACCOUNT_FILE.part", SESSION_FILE, "$SESSION_FILE.part").forEach { name ->
+            val file = File(directory, name)
+            if (file.exists() && !file.delete()) {
+                error("Não foi possível remover os dados locais da conta Ely.by.")
+            }
+        }
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        if (store.containsAlias(KEY_ALIAS)) store.deleteEntry(KEY_ALIAS)
+    }
+
     fun hasAccount(): Boolean = File(directory, ACCOUNT_FILE).isFile
 
     private fun writeEncrypted(plain: ByteArray) {
