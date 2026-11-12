@@ -8,6 +8,11 @@ use winit::platform::android::activity::AndroidApp;
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
+    // Keep Horizon's default game directory inside this app's private storage.
+    if let Some(data_dir) = app.internal_data_path() {
+        let _ = std::fs::create_dir_all(&data_dir);
+        let _ = std::env::set_current_dir(data_dir);
+    }
     horizon_client::set_android_app(app);
     horizon_client::entry::main();
 }
