@@ -36,7 +36,7 @@ class MinecraftDataInstaller(
         for (artifact in plan.artifacts) {
             if (isCancelled()) throw CancellationException("Minecraft download cancelled")
             val relative = File(artifact.relativePath)
-            require(!relative.isAbsolute && relative.path.split(File.separatorChar).none { it == ".." }) {
+            require(!relative.isAbsolute && relative.path.split(Regex("[/\\\\]+")).none { it == ".." }) {
                 "Unsafe artifact path: ${artifact.relativePath}"
             }
             val target = File(root, artifact.relativePath).canonicalFile
