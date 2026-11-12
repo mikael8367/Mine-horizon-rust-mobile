@@ -262,7 +262,10 @@ impl Loading {
                 horizon_client::hud::GUI_SCALE.store(self.settings.gui_scale, Ordering::Relaxed);
                 self.renderer = Some(r);
             }
-            Err(e) => self.error = Some(e),
+            Err(e) => {
+                android_startup_status("title_renderer_failed", &e.to_string());
+                self.error = Some(e);
+            }
         }
         // The title frame's wait starts once its renderer is built.
         self.ui_at = Some(Instant::now());
@@ -280,6 +283,7 @@ impl Loading {
             return;
         }
         if let Err(error) = self.poll_menu_resources() {
+            android_startup_status("resource_loading_failed", &error.to_string());
             self.error = Some(error);
             event_loop.exit();
             return;
@@ -318,7 +322,10 @@ impl Loading {
                     self.menu.perf.title_shown()
                 }
                 Ok(_) => {}
-                Err(e) => log::warn!("Horizon: loading screen frame failed: {e}"),
+                Err(e) => {
+                    android_startup_status("first_frame_failed", &e.to_string());
+                    log::warn!("Horizon: loading screen frame failed: {e}");
+                }
             }
         }
         if !self.shown {
