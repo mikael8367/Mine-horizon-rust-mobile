@@ -15,6 +15,12 @@ on:
   pull_request:
     paths:
       - "mobile/**"
+      - "crates/horizon-android/**"
+      - "crates/horizon-client/**"
+      - "crates/horizon-client-lib/**"
+      - "crates/horizon-client-render/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/android-shell.yml"
   workflow_dispatch:
 
