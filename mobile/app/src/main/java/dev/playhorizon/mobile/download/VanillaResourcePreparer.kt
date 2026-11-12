@@ -25,6 +25,16 @@ class VanillaResourcePreparer(private val context: Context) {
         val root = File(appFiles, "horizon-prepare-root")
         val output = File(appFiles, ".local/horizon-client/26.3")
         val game = File(appFiles, "minecraft/26.3")
+        val versionJson = File(game, "versions/26.3/26.3.json")
+        val clientJar = File(game, "versions/26.3/26.3.jar")
+        val serverJar = File(game, "versions/26.3/26.3-server.jar")
+        val libraries = File(game, "libraries")
+        val assets = File(game, "assets")
+        require(versionJson.isFile && clientJar.isFile && serverJar.isFile &&
+            libraries.isDirectory && File(assets, "indexes").isDirectory &&
+            File(assets, "objects").isDirectory) {
+            "Os arquivos oficiais estão incompletos. Baixe novamente os arquivos do Minecraft antes de preparar."
+        }
         val jdkHome = AndroidJdkInstaller().install(
             filesDir = appFiles,
             isCancelled = ::isCancelled,
@@ -40,17 +50,6 @@ class VanillaResourcePreparer(private val context: Context) {
         )
         checkCancelled()
         installSupportFiles(root)
-
-        val versionJson = File(game, "versions/26.3/26.3.json")
-        val clientJar = File(game, "versions/26.3/26.3.jar")
-        val serverJar = File(game, "versions/26.3/26.3-server.jar")
-        val libraries = File(game, "libraries")
-        val assets = File(game, "assets")
-        require(versionJson.isFile && clientJar.isFile && serverJar.isFile &&
-            libraries.isDirectory && File(assets, "indexes").isDirectory &&
-            File(assets, "objects").isDirectory) {
-            "Os arquivos oficiais estão incompletos. Baixe novamente os arquivos do Minecraft antes de preparar."
-        }
 
         val preparer = File(appFiles, "bin/horizon-prepare")
         preparer.parentFile?.mkdirs()
