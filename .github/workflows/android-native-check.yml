@@ -23,6 +23,7 @@ on:
       - "crates/horizon-client-lib/**"
       - "crates/horizon-client/**"
       - "crates/horizon-threads/**"
+      - "crates/horizon-android/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/android-native-check.yml"
