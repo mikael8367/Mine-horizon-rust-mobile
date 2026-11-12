@@ -26,6 +26,26 @@ jobs:
           ref: Build_JRE_25
           path: android-openjdk
 
+      - name: Patch Android ifaddrs declarations for OpenJDK HotSpot
+        working-directory: android-openjdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("build_jdk.sh")
+          s = p.read_text()
+          anchor = "git reset --hard\\n"
+          patch = """git reset --hard
+          if ! grep -q '^#include <ifaddrs.h>' src/hotspot/os/linux/os_perf_linux.cpp; then
+            sed -i '1i#include <ifaddrs.h>' src/hotspot/os/linux/os_perf_linux.cpp
+          fi
+          """
+          if anchor not in s:
+              raise SystemExit("Não encontrei o ponto seguro para aplicar o patch no build_jdk.sh")
+          p.write_text(s.replace(anchor, patch, 1))
+          PY
+
       - name: Build full OpenJDK 25 for Android ARM64
         working-directory: android-openjdk
         shell: bash
