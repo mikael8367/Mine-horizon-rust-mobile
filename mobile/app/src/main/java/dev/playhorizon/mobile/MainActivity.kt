@@ -175,8 +175,9 @@ class MainActivity : Activity() {
                     progressBar?.progress = 1000
                 }
             } catch (error: Throwable) {
+                val wasCancelled = error is CancellationException || Thread.currentThread().isInterrupted
                 runOnUiThread {
-                    statusText?.text = if (error is CancellationException || Thread.currentThread().isInterrupted) {
+                    statusText?.text = if (wasCancelled) {
                         "Download cancelado. Os arquivos temporários podem ser retomados."
                     } else {
                         "Download não concluído: ${error.message ?: error.javaClass.simpleName}"
