@@ -15,6 +15,8 @@ import android.text.InputType
 import dev.playhorizon.mobile.account.ElyByAccountStore
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.playhorizon.mobile.download.MinecraftDataInstaller
@@ -41,11 +43,13 @@ class MainActivity : Activity() {
     private var downloadTask: Future<*>? = null
     private var workerBusy = false
     private var nativeEngineOpened = false
+    private var selectedAccountMode = "offline"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         enterImmersiveLandscape()
+        selectedAccountMode = getSharedPreferences("horizon_launcher", MODE_PRIVATE).getString("account_mode", "offline") ?: "offline"
         buildDownloadScreen()
     }
 
@@ -203,6 +207,35 @@ class MainActivity : Activity() {
             }
         }
         content.addView(elyAction)
+        content.addView(TextView(this).apply {
+            text = "USAR ESTA CONTA AO INICIAR"
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(0xFFE8F5E9.toInt())
+            setPadding(0, dp(10), 0, dp(4))
+        })
+        val accountModes = RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+        }
+        val offlineOption = RadioButton(this).apply {
+            id = View.generateViewId()
+            text = "Offline"
+            setTextColor(0xFFE8F5E9.toInt())
+        }
+        val elyOption = RadioButton(this).apply {
+            id = View.generateViewId()
+            text = "Ely.by"
+            setTextColor(0xFFE8F5E9.toInt())
+        }
+        accountModes.addView(offlineOption)
+        accountModes.addView(elyOption)
+        accountModes.check(if (selectedAccountMode == "elyby") elyOption.id else offlineOption.id)
+        accountModes.setOnCheckedChangeListener { _, checkedId ->
+            selectedAccountMode = if (checkedId == elyOption.id) "elyby" else "offline"
+            getSharedPreferences("horizon_launcher", MODE_PRIVATE).edit()
+                .putString("account_mode", selectedAccountMode).apply()
+        }
+        content.addView(accountModes)
 
         val downloadAction = Button(this).apply {
             text = "Baixar arquivos do Minecraft"
@@ -236,8 +269,11 @@ class MainActivity : Activity() {
                 statusText?.text = "Recursos vanilla validados. Abrindo o motor Rust ARM64..."
                 try {
                     val accountStore = ElyByAccountStore(filesDir)
-                    if (accountStore.hasAccount()) {
+                    if (selectedAccountMode == "elyby") {
+                        if (!accountStore.hasAccount()) error("Conecte uma conta Ely.by antes de selecioná-la.")
                         accountStore.createLaunchSessionFile()
+                    } else {
+                        File(filesDir, "horizon-session.json").delete()
                     }
                     nativeEngineOpened = true
                     startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
