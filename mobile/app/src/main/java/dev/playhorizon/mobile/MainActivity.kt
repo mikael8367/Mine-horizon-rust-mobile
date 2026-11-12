@@ -34,6 +34,7 @@ class MainActivity : Activity() {
     private var cancelButton: Button? = null
     private var downloadTask: Future<*>? = null
     private var workerBusy = false
+    private var nativeEngineOpened = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +46,14 @@ class MainActivity : Activity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) enterImmersiveLandscape()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (nativeEngineOpened) {
+            nativeEngineOpened = false
+            statusText?.text = "Você voltou ao launcher. O motor nativo foi fechado."
+        }
     }
 
     override fun onDestroy() {
@@ -85,13 +94,19 @@ class MainActivity : Activity() {
         content.addView(downloadAction)
 
         content.addView(Button(this).apply {
-            text = "Abrir renderizador nativo 3D"
+            text = "Testar motor Rust em tela cheia"
             setOnClickListener {
                 val nativeLibrary = File(applicationInfo.nativeLibraryDir, "libhorizon_android.so")
-                if (nativeLibrary.isFile) {
+                if (!nativeLibrary.isFile) {
+                    statusText?.text = "Biblioteca ARM64 ainda não foi incluída. Aguarde a compilação do CI."
+                    return@setOnClickListener
+                }
+                try {
+                    nativeEngineOpened = true
                     startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
-                } else {
-                    statusText?.text = "Renderizador ARM64 ainda não foi incluído neste pacote. Compile o runtime nativo antes de abrir o motor."
+                } catch (error: Throwable) {
+                    nativeEngineOpened = false
+                    statusText?.text = "Não foi possível abrir o motor nativo: " + (error.message ?: error.javaClass.simpleName)
                 }
             }
         })
