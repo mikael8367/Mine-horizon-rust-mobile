@@ -124,8 +124,8 @@ class VerifiedDownloader(
 
             if (expectedSize != null && part.length() != expectedSize) {
                 val actualSize = part.length()
-                part.delete()
-                error("Size mismatch: expected $expectedSize bytes, got $actualSize")
+                if (actualSize > expectedSize) part.delete()
+                error("Incomplete download: expected $expectedSize bytes, got $actualSize; partial file kept for resume")
             }
             if (!matchesDigest(part, normalizedAlgorithm, expectedDigest)) {
                 part.delete()
