@@ -82,6 +82,15 @@ pub fn android_main(app: AndroidApp) {
         args.push(session_file.to_string_lossy().into_owned());
     }
 
+    // Vanilla stores single-player worlds under the process working directory.
+    // Keep that directory separate from launcher metadata, account tokens and downloads.
+    if let Err(error) = std::env::set_current_dir(&game_dir) {
+        write_status(
+            "storage_setup_failed",
+            &format!("Não foi possível selecionar a pasta dos mundos: {error}"),
+        );
+        return;
+    }
     write_status("engine_starting", "Entrando no loop principal do Horizon.");
     horizon_client::set_android_app(app);
     horizon_client::entry::main_with_args(Default::default(), args);
