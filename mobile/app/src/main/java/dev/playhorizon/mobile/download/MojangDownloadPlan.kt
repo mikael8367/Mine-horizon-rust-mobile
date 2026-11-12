@@ -94,7 +94,11 @@ class MojangDownloadPlan {
         }
         artifacts += indexArtifact
 
-        val indexJson = JSONObject(fetchText(indexArtifact.url))
+        val indexText = fetchText(indexArtifact.url)
+        require(sha1(indexText.toByteArray(Charsets.UTF_8)) == indexArtifact.sha1) {
+            "Minecraft asset index checksum mismatch"
+        }
+        val indexJson = JSONObject(indexText)
         val objects = indexJson.getJSONObject("objects")
         val keys = objects.keys()
         while (keys.hasNext()) {
