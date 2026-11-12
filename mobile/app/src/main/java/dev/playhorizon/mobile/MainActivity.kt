@@ -38,7 +38,6 @@ class MainActivity : Activity() {
     private var cancelButton: Button? = null
     private var prepareButton: Button? = null
     private var playerNameInput: EditText? = null
-    private var elyByButton: Button? = null
     private var downloadTask: Future<*>? = null
     private var workerBusy = false
     private var nativeEngineOpened = false
@@ -172,12 +171,13 @@ class MainActivity : Activity() {
                 val password = elyPassword.text?.toString()?.toCharArray() ?: CharArray(0)
                 if (username.isBlank() || password.isEmpty()) {
                     statusText?.text = "Informe o usuário e a senha Ely.by."
-                    password.fill('\\u0000')
+                    password.fill('\u0000')
                     return@setOnClickListener
                 }
                 isEnabled = false
                 text = "Conectando à Ely.by..."
                 statusText?.text = "Autenticando com Ely.by por HTTPS..."
+                workerBusy = true
                 downloadTask = worker.submit {
                     try {
                         val profile = elyStore.signIn(username, password)
@@ -199,11 +199,9 @@ class MainActivity : Activity() {
                             downloadTask = null
                         }
                     }
-                    workerBusy = true
                 }
             }
         }
-        elyByButton = elyAction
         content.addView(elyAction)
 
         val downloadAction = Button(this).apply {
