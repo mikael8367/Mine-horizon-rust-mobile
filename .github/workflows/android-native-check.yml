@@ -9,6 +9,7 @@ on:
       - "crates/horizon-client-core/**"
       - "crates/horizon-client-lib/**"
       - "crates/horizon-client/**"
+      - "crates/horizon-android/**"
       - "crates/horizon-threads/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -53,6 +54,8 @@ jobs:
           test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" >> "$GITHUB_ENV"
+          echo "CC_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> "$GITHUB_ENV"
 
       - name: Check Android ARM64 renderer and input crates
-        run: cargo check --locked --lib --target aarch64-linux-android -p horizon-client-render -p horizon-client-input -p horizon-client-core
+        run: cargo check --lib --target aarch64-linux-android -p horizon-client-render -p horizon-client-input -p horizon-client-core
