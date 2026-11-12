@@ -82,6 +82,7 @@ This document tracks the Android port of the existing Horizon engine. The goal i
 
 ## Validation checklist
 
+- [ ] Android Gradle shell build on latest commit (CI running; earlier shell build passed)
 - [ ] cargo fmt --check
 - [ ] cargo check for the Android target
 - [ ] Android native library loads on arm64 hardware
@@ -96,4 +97,4 @@ This document tracks the Android port of the existing Horizon engine. The goal i
 
 ## Current status
 
-Planning and repository audit only. No Android runtime, playable port, or APK is claimed by this document. Each phase must be implemented and tested before it is marked complete.
+Android shell and landscape orientation are implemented. The app now resolves the pinned Minecraft 26.3 Mojang metadata and downloads the version JSON, client/server jars, Maven artifacts, and asset objects with SHA-1/size verification, resumable partial files, progress, and cancellation. This downloads game inputs only: Microsoft ownership validation, Android-compatible Java 25 resource preparation, the ARM64 Rust runtime/bridge, touch/render integration, and real-device gameplay are still incomplete. No playable Android port or APK is claimed. Each phase must be implemented and tested before it is marked complete.
