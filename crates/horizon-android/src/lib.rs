@@ -30,7 +30,7 @@ pub fn android_main(app: AndroidApp) {
     if let Ok(name) = std::fs::read_to_string(&offline_name) {
         let name = name.trim();
         if !name.is_empty()
-            && name.len() <= 16
+            && (3..=16).contains(&name.len())
             && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
         {
             args.push("--name".to_owned());
