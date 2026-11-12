@@ -10,7 +10,7 @@ fn android_startup_status(stage: &str, detail: &str) {
         let Ok(directory) = std::env::current_dir() else { return };
         let path = directory.join("horizon-startup-status.txt");
         let temporary = directory.join("horizon-startup-status.txt.part");
-        let contents = format!("{stage}\\n{detail}\\n");
+        let contents = format!("{stage}\n{detail}\n");
         if std::fs::write(&temporary, contents).is_ok() {
             let _ = std::fs::rename(temporary, path);
         }
