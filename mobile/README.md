@@ -37,6 +37,8 @@ tested before full game-data preparation can be claimed.
 ## Current implementation status
 
 - Android app shell is landscape-first and uses immersive mode.
+- The launcher UI remains in `MainActivity`; the native Rust engine opens as a separate fullscreen `NativeActivity` on top of it. Finishing the native activity (Android Back) returns to the launcher instead of replacing its screen.
+- The current fullscreen action is explicitly a renderer test, not a Play button: game preparation, Microsoft sign-in/entitlement, and resource validation are not complete. The launcher reports when the ARM64 library is missing and handles launch errors without claiming the game is playable.
 - `MojangDownloadPlan.kt` resolves the pinned 26.3 version JSON, checks its
   accepted SHA-1, checks the pinned client/server jars and accepted asset index,
   then enumerates library artifacts and content-addressed asset objects.
