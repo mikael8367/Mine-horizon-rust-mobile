@@ -18,6 +18,8 @@ import dev.playhorizon.mobile.download.MojangDownloadPlan
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.CancellationException
 
 /**
  * Minimal Android download screen. It downloads and verifies the official
@@ -28,6 +30,8 @@ class MainActivity : Activity() {
     private var downloadButton: Button? = null
     private var progressBar: ProgressBar? = null
     private var statusText: TextView? = null
+    private var cancelButton: Button? = null
+    private var downloadTask: Future<*>? = null
     private var workerBusy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,6 +83,17 @@ class MainActivity : Activity() {
         downloadButton = downloadAction
         content.addView(downloadAction)
 
+        val cancelAction = Button(this).apply {
+            text = "Cancelar download"
+            visibility = View.GONE
+            setOnClickListener {
+                downloadTask?.cancel(true)
+                statusText?.text = "Cancelando download... Os arquivos temporários válidos serão mantidos para retomar."
+            }
+        }
+        cancelButton = cancelAction
+        content.addView(cancelAction)
+
         val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000
             progress = 0
@@ -124,7 +139,8 @@ class MainActivity : Activity() {
         progressBar?.progress = 0
         statusText?.text = "Consultando o manifesto oficial da Mojang..."
 
-        worker.execute {
+        cancelButton?.visibility = View.VISIBLE
+        downloadTask = worker.submit {
             try {
                 val plan = MojangDownloadPlan().resolve()
                 val installer = MinecraftDataInstaller()
@@ -160,11 +176,17 @@ class MainActivity : Activity() {
                 }
             } catch (error: Throwable) {
                 runOnUiThread {
-                    statusText?.text = "Download não concluído: ${error.message ?: error.javaClass.simpleName}"
+                    statusText?.text = if (error is CancellationException || Thread.currentThread().isInterrupted) {
+                        "Download cancelado. Os arquivos temporários podem ser retomados."
+                    } else {
+                        "Download não concluído: ${error.message ?: error.javaClass.simpleName}"
+                    }
                 }
             } finally {
                 runOnUiThread {
                     workerBusy = false
+                    downloadTask = null
+                    cancelButton?.visibility = View.GONE
                     downloadButton?.isEnabled = true
                     downloadButton?.text = "Baixar arquivos do Minecraft"
                 }
