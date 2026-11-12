@@ -3,57 +3,64 @@
 This is the Android host module for the existing Horizon Rust game. It is not a
 standalone replacement game or a Java Edition launcher.
 
-## Download requirements
+## Minecraft game-data download
 
-### Minecraft game data
+The landscape Android screen now has a real download action for the Horizon-pinned
+Minecraft 26.3 inputs. It resolves Mojang's official version manifest, verifies
+the pinned version JSON and asset-index SHA-1 values, and creates a download plan
+for the version JSON, client/server jars, Maven libraries and every asset object.
 
-The mobile installer must resolve the pinned Minecraft version through Mojang's
-official version manifest and download only from Mojang's distribution hosts.
-Every artifact must be checked against the SHA-1 and size in the official version
-metadata. Asset-index objects must be checked individually. Downloads must be
-resumable, cancellable, and staged as `.part` files; an incomplete or invalid
-file must never be exposed as installed game data.
+Downloads use HTTPS allow-listed Mojang hosts, SHA-1 plus exact byte-size checks,
+temporary `.part` files, HTTP range resume, cancellation checks and progress
+callbacks. Existing files are re-hashed before being reused. Files are stored in
+the app-private `files/minecraft/26.3` directory. No Mojang game files are stored
+in this repository or in CI.
 
-The player must sign in with a Microsoft account that owns Minecraft: Java
-Edition before the official client data is prepared/launched. Do not bundle
-Minecraft jars/assets in this repository, APK, or CI artifacts, and do not use
-third-party mirrors.
+This is a verified file-download stage, not yet a prepared or playable game.
+Microsoft sign-in and Java Edition entitlement validation must be integrated
+before preparation/Play can be enabled. The app currently has no Play action.
 
-### Horizon native runtime
+## Runtime and preparation
 
 Horizon gameplay is Rust-native; it does not need a desktop Java VM to execute
-the game. Android needs an ARM64 native engine package (the Android-compatible
-Rust shared library/host bridge, native dependencies, and verified metadata).
-Install it into app-private storage, verify its release checksum/signature, and
-activate it atomically only after all required files pass verification.
+the game. Android still needs a compatible ARM64 native engine/host bridge,
+its native dependencies, and a verified runtime package. No such Android runtime
+artifact is published yet, so the runtime section intentionally reports pending
+instead of downloading an incompatible desktop binary.
 
-The existing `horizon-prepare` pipeline also invokes Java for vanilla resource
+The existing `horizon-prepare` pipeline also invokes Java 25 for vanilla resource
 exporters. That is a separate preparation requirement, not the runtime used to
-execute the Rust game. An Android-compatible preparation strategy/runtime must
-be implemented and tested before claiming full game-data preparation on Android.
+execute Rust gameplay. The desktop Mojang Linux JRE is not an Android runtime.
+An Android-compatible preparation strategy and runtime must be implemented and
+tested before full game-data preparation can be claimed.
 
 ## Current implementation status
 
-- `VerifiedDownloader.kt` provides HTTPS allow-listed, SHA-1/SHA-256 verified
-  downloads, redirects restricted to trusted distribution hosts, resume support,
-  progress callbacks, temporary files, and atomic finalization.
-- This helper is infrastructure only. It is not yet wired to a Minecraft
-  version picker, Mojang account authentication, asset-index traversal, the
-  Android native runtime release feed, or the play button.
-- No Android native Horizon runtime artifact is published by this module yet.
-- Do not show a download as complete until the metadata, all required files,
-  hashes, and final install validation pass.
+- Android app shell is landscape-first and uses immersive mode.
+- `MojangDownloadPlan.kt` resolves the pinned 26.3 version JSON, checks its
+  accepted SHA-1, checks the pinned client/server jars and accepted asset index,
+  then enumerates library artifacts and content-addressed asset objects.
+- `MinecraftDataInstaller.kt` installs files sequentially into app-private
+  storage and exposes total/file progress. Existing files are reused only after
+  size and SHA-1 verification.
+- `VerifiedDownloader.kt` restricts HTTPS hosts and redirects, resumes partial
+  transfers, streams SHA-1/SHA-256 verification without loading large files into
+  memory, checks exact file sizes, and finalizes verified files atomically.
+- The download button is connected to this pipeline. It does not mark the game
+  prepared and does not enable Play.
+- Microsoft device-code sign-in/entitlement, Android native runtime packaging,
+  Java-25-compatible resource preparation, SAF folder selection, and gameplay
+  integration remain incomplete.
 - Never create an APK unless the maintainer explicitly requests one.
 
-## Required integration sequence
+## Remaining integration sequence
 
-1. Add the Microsoft device-code authentication and entitlement check.
-2. Fetch and pin the official Mojang version manifest for the Horizon-required version.
-3. Download the version JSON, client/server inputs, libraries, and asset objects with
-   official hashes; record total progress and allow cancellation.
-4. Build the ARM64 Android engine and bridge in CI, publish a checksum/signature
-   manifest, and download that exact compatible build.
-5. Run Android-compatible resource preparation; validate the output with the
-   engine's resource checker.
-6. Enable Play only after native runtime, owned game data, and prepared resources
-   all pass validation.
+1. Add Microsoft device-code sign-in and Minecraft: Java Edition entitlement validation.
+2. Build the ARM64 Android engine and native bridge in CI; publish a signed/checksummed
+   runtime manifest and compatible native package.
+3. Implement an Android-compatible Java 25 preparation strategy for Horizon's
+   vanilla exporters, or replace those exporter calls with a verified Android-native path.
+4. Validate all prepared resources using Horizon's resource checker.
+5. Enable Play only after account entitlement, game data, prepared resources and
+   native runtime all pass validation.
+6. Add Android Storage Access Framework support and real-device lifecycle/performance tests.
