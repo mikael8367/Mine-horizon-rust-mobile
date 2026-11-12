@@ -620,7 +620,7 @@ use std::{
 use winit::{
     application::ApplicationHandler,
     error::EventLoopError,
-    event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent},
+    event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::{CursorGrabMode, Window, WindowId},
@@ -2268,6 +2268,9 @@ struct Game<'a> {
     left: bool,
     right: bool,
     cursor: (f32, f32),
+    /// Active Android fingers mapped to the game's existing mouse input path.
+    #[cfg(target_os = "android")]
+    android_touch_pointers: HashMap<u64, MouseButton>,
     /// The cursor icon the window shows (`widgets::take_cursor` each frame).
     cursor_icon: horizon_client::widgets::Cursor,
     captured: bool,
@@ -9830,6 +9833,66 @@ impl Game<'_> {
     /// it a handler both can call and a `gamepad::Route` (screenshot and fullscreen do this). A
     /// screen's own raw keys, text and mods' key hooks stay raw on purpose.
     fn handle_window_event_inner(&mut self, event_loop: &dyn EventLoopCtl, mut event: WindowEvent) {
+
+        // Android has no physical mouse. Route the first finger to the existing
+        // left-click path and a second finger to right-click/use. This makes the
+        // existing title screens, inventory and in-world mouse actions reachable
+        // without duplicating their hit-testing or game-action logic.
+        #[cfg(target_os = "android")]
+        if let WindowEvent::Touch(touch) = &event {
+            let id = touch.id;
+            let device_id = touch.device_id;
+            let position = touch.location;
+            match touch.phase {
+                TouchPhase::Started => {
+                    if !self.android_touch_pointers.contains_key(&id) {
+                        let button = if self.android_touch_pointers.is_empty() {
+                            MouseButton::Left
+                        } else {
+                            MouseButton::Right
+                        };
+                        self.android_touch_pointers.insert(id, button);
+                        self.handle_window_event_inner(
+                            event_loop,
+                            WindowEvent::CursorMoved { device_id, position },
+                        );
+                        self.handle_window_event_inner(
+                            event_loop,
+                            WindowEvent::MouseInput {
+                                device_id,
+                                state: ElementState::Pressed,
+                                button,
+                            },
+                        );
+                    }
+                }
+                TouchPhase::Moved => {
+                    if self.android_touch_pointers.contains_key(&id) {
+                        self.handle_window_event_inner(
+                            event_loop,
+                            WindowEvent::CursorMoved { device_id, position },
+                        );
+                    }
+                }
+                TouchPhase::Ended | TouchPhase::Cancelled => {
+                    if let Some(button) = self.android_touch_pointers.remove(&id) {
+                        self.handle_window_event_inner(
+                            event_loop,
+                            WindowEvent::CursorMoved { device_id, position },
+                        );
+                        self.handle_window_event_inner(
+                            event_loop,
+                            WindowEvent::MouseInput {
+                                device_id,
+                                state: ElementState::Released,
+                                button,
+                            },
+                        );
+                    }
+                }
+            }
+            return;
+        }
         if let WindowEvent::Focused(false) = &event {
             self.physical_keys.clear();
             self.physical_buttons.clear();
@@ -11470,6 +11533,8 @@ impl<'a> Game<'a> {
             left: false,
             right: false,
             cursor: (0.0, 0.0),
+            #[cfg(target_os = "android")]
+            android_touch_pointers: HashMap::new(),
             cursor_icon: horizon_client::widgets::Cursor::Arrow,
             captured: false,
             capture_mode: None,
