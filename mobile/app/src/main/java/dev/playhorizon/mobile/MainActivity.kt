@@ -109,7 +109,7 @@ class MainActivity : Activity() {
             setTextColor(0xFFB8C9B8.toInt())
         })
         val playerName = EditText(this).apply {
-            hint = "Nome do jogador (1–16 caracteres)"
+            hint = "Nome do jogador (3–16 caracteres)"
             singleLine = true
             setTextColor(0xFFFFFFFF.toInt())
             setHintTextColor(0xFF9EAA9E.toInt())
@@ -121,8 +121,8 @@ class MainActivity : Activity() {
             text = "Salvar perfil offline"
             setOnClickListener {
                 val name = playerNameInput?.text?.toString()?.trim().orEmpty()
-                if (!name.matches(Regex("[A-Za-z0-9_]{1,16}"))) {
-                    statusText?.text = "Nome inválido. Use de 1 a 16 letras, números ou _."
+                if (!name.matches(Regex("[A-Za-z0-9_]{3,16}"))) {
+                    statusText?.text = "Nome inválido. Use de 3 a 16 letras, números ou _."
                     return@setOnClickListener
                 }
                 try {
@@ -449,7 +449,7 @@ class MainActivity : Activity() {
     private fun loadOfflinePlayerName(): String {
         return runCatching {
             File(filesDir, "horizon-player-name.txt").readText(Charsets.UTF_8).trim()
-        }.getOrNull()?.takeIf { it.matches(Regex("[A-Za-z0-9_]{1,16}")) } ?: "Steve"
+        }.getOrNull()?.takeIf { it.matches(Regex("[A-Za-z0-9_]{3,16}")) } ?: "Steve"
     }
 
     private fun formatMb(value: Double): String = String.format(Locale.ROOT, "%.1f", value)
