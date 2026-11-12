@@ -777,8 +777,15 @@ mod tests {
         let path = write(&dir, text, 0o600);
         let s = AuthSession::load(&path).unwrap();
         assert_eq!((s.name.as_str(), s.uuid), ("Notch", UUID));
+        assert_eq!(s.provider, AuthProvider::Microsoft);
         assert!(!path.exists(), "deleted after reading");
         assert!(!format!("{s:?}").contains("mock-token"));
+        let ely_text = r#"{"name":"Player","uuid":"069a79f444e94726a5befca90e38aaf5","access_token":"ely-secret","user_type":"ely.by"}"#;
+        let ely_path = write(&dir, ely_text, 0o600);
+        let ely = AuthSession::load(&ely_path).unwrap();
+        assert_eq!(ely.provider, AuthProvider::ElyBy);
+        assert!(!ely_path.exists(), "Ely.by session is also one-use");
+        assert!(!format!("{ely:?}").contains("ely-secret"));
         #[cfg(unix)]
         {
             let path = write(&dir, text, 0o644);
