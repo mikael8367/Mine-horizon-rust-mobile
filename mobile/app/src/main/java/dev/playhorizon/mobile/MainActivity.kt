@@ -164,8 +164,16 @@ class MainActivity : Activity() {
             setTextColor(0xFFFFFFFF.toInt())
             setHintTextColor(0xFF9EAA9E.toInt())
         }
+        val elyTwoFactor = EditText(this).apply {
+            hint = "Código 2FA (opcional)"
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setTextColor(0xFFFFFFFF.toInt())
+            setHintTextColor(0xFF9EAA9E.toInt())
+        }
         content.addView(elyUsername)
         content.addView(elyPassword)
+        content.addView(elyTwoFactor)
         val elyStore = ElyByAccountStore(filesDir)
         val elyAction = Button(this).apply {
             text = if (elyStore.hasAccount()) "Conectar novamente / atualizar conta Ely.by" else "Entrar com Ely.by"
@@ -173,6 +181,7 @@ class MainActivity : Activity() {
                 if (workerBusy) return@setOnClickListener
                 val username = elyUsername.text?.toString()?.trim().orEmpty()
                 val password = elyPassword.text?.toString()?.toCharArray() ?: CharArray(0)
+                val twoFactorCode = elyTwoFactor.text?.toString()?.trim().orEmpty().ifEmpty { null }
                 if (username.isBlank() || password.isEmpty()) {
                     statusText?.text = "Informe o usuário e a senha Ely.by."
                     password.fill('\u0000')
@@ -184,15 +193,17 @@ class MainActivity : Activity() {
                 workerBusy = true
                 downloadTask = worker.submit {
                     try {
-                        val profile = elyStore.signIn(username, password)
+                        val profile = elyStore.signIn(username, password, twoFactorCode)
                         runOnUiThread {
                             elyPassword.text?.clear()
+                            elyTwoFactor.text?.clear()
                             statusText?.text = "Conta Ely.by conectada: ${profile.name}. A sessão será entregue ao motor ao iniciar."
                             elyAction.text = "Conta Ely.by conectada: ${profile.name}"
                         }
                     } catch (error: Throwable) {
                         runOnUiThread {
                             elyPassword.text?.clear()
+                            elyTwoFactor.text?.clear()
                             statusText?.text = "Falha no login Ely.by: ${error.message ?: error.javaClass.simpleName}"
                             elyAction.text = "Tentar login Ely.by novamente"
                         }
@@ -248,6 +259,7 @@ class MainActivity : Activity() {
                         .putString("account_mode", "offline").apply()
                     accountModes.check(offlineOption.id)
                     elyPassword.text?.clear()
+                    elyTwoFactor.text?.clear()
                     elyUsername.text?.clear()
                     elyAction.text = "Entrar com Ely.by"
                     isEnabled = false
