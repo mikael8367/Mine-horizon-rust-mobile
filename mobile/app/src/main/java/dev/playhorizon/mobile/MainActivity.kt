@@ -249,7 +249,7 @@ class MainActivity : Activity() {
                 .putString("account_mode", selectedAccountMode).apply()
         }
         content.addView(accountModes)
-        elyDisconnectAction = Button(this).apply {
+        val disconnectButton = Button(this).apply {
             text = "Desconectar conta Ely.by"
             isEnabled = elyStore.hasAccount()
             setOnClickListener {
@@ -271,8 +271,8 @@ class MainActivity : Activity() {
                 }
             }
         }
-        content.addView(elyDisconnectAction)
-
+        elyDisconnectAction = disconnectButton
+        content.addView(disconnectButton)
 
         val downloadAction = Button(this).apply {
             text = "Baixar arquivos do Minecraft"
