@@ -140,25 +140,27 @@ class AndroidJdkInstaller(
         require(entries > 0) { "Arquivo do Java vazio" }
     }
 
-    private fun isJava25(executable: File, tool: String): Boolean = try {
-        val home = executable.parentFile?.parentFile ?: return false
-        val builder = ProcessBuilder(executable.absolutePath, "-version").redirectErrorStream(true)
-        builder.environment()["JAVA_HOME"] = home.absolutePath
-        builder.environment()["LD_LIBRARY_PATH"] = listOf(
-            File(home, "lib").absolutePath,
-            File(home, "lib/server").absolutePath,
-            builder.environment()["LD_LIBRARY_PATH"].orEmpty(),
-        ).filter { it.isNotBlank() }.joinToString(File.pathSeparator)
-        val process = builder.start()
-        if (!process.waitFor(20, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            return false
+    private fun isJava25(executable: File, tool: String): Boolean {
+        return try {
+            val home = executable.parentFile?.parentFile ?: return false
+            val builder = ProcessBuilder(executable.absolutePath, "-version").redirectErrorStream(true)
+            builder.environment()["JAVA_HOME"] = home.absolutePath
+            builder.environment()["LD_LIBRARY_PATH"] = listOf(
+                File(home, "lib").absolutePath,
+                File(home, "lib/server").absolutePath,
+                builder.environment()["LD_LIBRARY_PATH"].orEmpty(),
+            ).filter { it.isNotBlank() }.joinToString(File.pathSeparator)
+            val process = builder.start()
+            if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return false
+            }
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.exitValue() == 0 && output.contains("25") &&
+                (tool != "javac" || output.contains("javac"))
+        } catch (_: Throwable) {
+            false
         }
-        val output = process.inputStream.bufferedReader().use { it.readText() }
-        process.exitValue() == 0 && output.contains("25") &&
-            (tool != "javac" || output.contains("javac"))
-    } catch (_: Throwable) {
-        false
     }
 
     private fun fetchText(urlText: String, redirects: Int = 0): String {
