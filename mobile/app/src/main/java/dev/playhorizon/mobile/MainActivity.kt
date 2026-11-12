@@ -140,7 +140,7 @@ class MainActivity : Activity() {
         })
         val playerName = EditText(this).apply {
             hint = "Nome do jogador (3–16 caracteres)"
-            singleLine = true
+            setSingleLine(true)
             setTextColor(0xFFFFFFFF.toInt())
             setHintTextColor(0xFF9EAA9E.toInt())
             setText(loadOfflinePlayerName())
@@ -182,21 +182,21 @@ class MainActivity : Activity() {
         })
         val elyUsername = EditText(this).apply {
             hint = "Usuário ou e-mail Ely.by"
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
             setTextColor(0xFFFFFFFF.toInt())
             setHintTextColor(0xFF9EAA9E.toInt())
         }
         val elyPassword = EditText(this).apply {
             hint = "Senha Ely.by"
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setTextColor(0xFFFFFFFF.toInt())
             setHintTextColor(0xFF9EAA9E.toInt())
         }
         val elyTwoFactor = EditText(this).apply {
             hint = "Código 2FA (opcional)"
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_NUMBER
             setTextColor(0xFFFFFFFF.toInt())
             setHintTextColor(0xFF9EAA9E.toInt())
@@ -206,7 +206,8 @@ class MainActivity : Activity() {
         content.addView(elyTwoFactor)
         val elyStore = ElyByAccountStore(filesDir)
         var elyDisconnectAction: Button? = null
-        val elyAction = Button(this).apply {
+        lateinit var elyAction: Button
+        elyAction = Button(this).apply {
             text = if (elyStore.hasAccount()) "Conectar novamente / atualizar conta Ely.by" else "Entrar com Ely.by"
             setOnClickListener {
                 if (workerBusy) return@setOnClickListener
