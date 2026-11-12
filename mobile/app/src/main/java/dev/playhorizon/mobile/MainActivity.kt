@@ -345,6 +345,8 @@ class MainActivity : Activity() {
                     startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
                 } catch (error: Throwable) {
                     nativeEngineOpened = false
+                    getSharedPreferences("horizon_launcher", MODE_PRIVATE).edit()
+                        .putBoolean("native_launch_pending", false).apply()
                     statusText?.text = "Não foi possível abrir o motor nativo: " + (error.message ?: error.javaClass.simpleName)
                 }
             }
