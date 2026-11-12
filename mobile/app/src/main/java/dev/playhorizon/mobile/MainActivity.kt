@@ -10,6 +10,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -34,6 +35,7 @@ class MainActivity : Activity() {
     private var statusText: TextView? = null
     private var cancelButton: Button? = null
     private var prepareButton: Button? = null
+    private var playerNameInput: EditText? = null
     private var downloadTask: Future<*>? = null
     private var workerBusy = false
     private var nativeEngineOpened = false
@@ -86,6 +88,48 @@ class MainActivity : Activity() {
             textSize = 16f
             setTextColor(0xFFB8C9B8.toInt())
             setPadding(0, dp(8), 0, dp(12))
+        })
+
+        content.addView(TextView(this).apply {
+            text = "CONTA OFFLINE"
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(0xFFE8F5E9.toInt())
+            setPadding(0, dp(8), 0, dp(6))
+        })
+        content.addView(TextView(this).apply {
+            text = "Perfil local para jogar mundos singleplayer e servidores que aceitam modo offline. Não autentica em servidores online."
+            textSize = 13f
+            setTextColor(0xFFB8C9B8.toInt())
+        })
+        val playerName = EditText(this).apply {
+            hint = "Nome do jogador (1–16 caracteres)"
+            singleLine = true
+            setTextColor(0xFFFFFFFF.toInt())
+            setHintTextColor(0xFF9EAA9E.toInt())
+            setText(loadOfflinePlayerName())
+        }
+        playerNameInput = playerName
+        content.addView(playerName)
+        content.addView(Button(this).apply {
+            text = "Salvar perfil offline"
+            setOnClickListener {
+                val name = playerNameInput?.text?.toString()?.trim().orEmpty()
+                if (!name.matches(Regex("[A-Za-z0-9_]{1,16}"))) {
+                    statusText?.text = "Nome inválido. Use de 1 a 16 letras, números ou _."
+                    return@setOnClickListener
+                }
+                try {
+                    val target = File(filesDir, "horizon-player-name.txt")
+                    val temp = File(filesDir, "horizon-player-name.txt.part")
+                    temp.writeText(name, Charsets.UTF_8)
+                    if (target.exists() && !target.delete()) error("Não foi possível substituir o perfil anterior")
+                    if (!temp.renameTo(target)) error("Não foi possível salvar o perfil")
+                    statusText?.text = "Perfil offline salvo: $name. O motor usará esse nome na próxima inicialização."
+                } catch (error: Throwable) {
+                    statusText?.text = "Falha ao salvar perfil: ${error.message ?: error.javaClass.simpleName}"
+                }
+            }
         })
 
         val downloadAction = Button(this).apply {
@@ -287,6 +331,13 @@ class MainActivity : Activity() {
                 }
             }
         }
+    }
+
+
+    private fun loadOfflinePlayerName(): String {
+        return runCatching {
+            File(filesDir, "horizon-player-name.txt").readText(Charsets.UTF_8).trim()
+        }.getOrNull()?.takeIf { it.matches(Regex("[A-Za-z0-9_]{1,16}")) } ?: "Steve"
     }
 
     private fun formatMb(value: Double): String = String.format(Locale.ROOT, "%.1f", value)
