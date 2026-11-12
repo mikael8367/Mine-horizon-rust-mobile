@@ -2,6 +2,7 @@ package dev.playhorizon.mobile
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import android.content.Intent
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -82,6 +83,18 @@ class MainActivity : Activity() {
         }
         downloadButton = downloadAction
         content.addView(downloadAction)
+
+        content.addView(Button(this).apply {
+            text = "Abrir renderizador nativo 3D"
+            setOnClickListener {
+                val nativeLibrary = File(applicationInfo.nativeLibraryDir, "libhorizon_android.so")
+                if (nativeLibrary.isFile) {
+                    startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
+                } else {
+                    statusText?.text = "Renderizador ARM64 ainda não foi incluído neste pacote. Compile o runtime nativo antes de abrir o motor."
+                }
+            }
+        })
 
         val cancelAction = Button(this).apply {
             text = "Cancelar download"
