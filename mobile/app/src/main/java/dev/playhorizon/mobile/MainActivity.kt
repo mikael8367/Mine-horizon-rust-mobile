@@ -64,11 +64,10 @@ class MainActivity : Activity() {
         if (nativeEngineOpened || startupPreferences.getBoolean("native_launch_pending", false)) {
             nativeEngineOpened = false
             startupPreferences.edit().putBoolean("native_launch_pending", false).apply()
-            // Preflight runs before the native engine switches to horizon-game;
-            // later milestones are written inside that game directory.
-            val gameStatusFile = File(File(filesDir, "horizon-game"), "horizon-startup-status.txt")
-            val launcherStatusFile = File(filesDir, "horizon-startup-status.txt")
-            val statusFile = if (gameStatusFile.isFile) gameStatusFile else launcherStatusFile
+            // Every native startup milestone is stored in internal_data_path,
+            // even after the engine switches cwd to horizon-game for world saves.
+            // Read only the canonical file so an older game-directory status cannot mask this launch.
+            val statusFile = File(filesDir, "horizon-startup-status.txt")
             val lines = runCatching { statusFile.readLines(Charsets.UTF_8) }.getOrDefault(emptyList())
             val stage = lines.firstOrNull().orEmpty()
             val detail = lines.drop(1).joinToString(" ").trim()
