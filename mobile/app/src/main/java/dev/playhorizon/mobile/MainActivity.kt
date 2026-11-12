@@ -282,7 +282,7 @@ class MainActivity : Activity() {
         content.addView(downloadAction)
 
         val prepareAction = Button(this).apply {
-            text = "Preparar recursos vanilla"
+            text = "Baixar e preparar recursos vanilla"
             setOnClickListener { startVanillaPreparation() }
         }
         prepareButton = prepareAction
@@ -438,43 +438,91 @@ class MainActivity : Activity() {
         workerBusy = true
         downloadButton?.isEnabled = false
         prepareButton?.isEnabled = false
-        prepareButton?.text = "Preparando recursos..."
+        prepareButton?.text = "Baixando arquivos oficiais..."
+        cancelButton?.text = "Cancelar operação"
         cancelButton?.visibility = View.VISIBLE
         progressBar?.progress = 0
-        statusText?.text = "Iniciando preparação vanilla..."
+        statusText?.text = "Etapa 1/2: consultando o manifesto oficial da Mojang..."
 
         downloadTask = worker.submit {
             try {
+                // Re-resolve the official 26.3 plan on every run. Existing files
+                // are reused only after exact-size and SHA-1 verification.
+                val plan = MojangDownloadPlan().resolve()
+                val gameDirectory = File(filesDir, "minecraft/26.3")
+                val installed = MinecraftDataInstaller().install(
+                    plan = plan,
+                    gameDirectory = gameDirectory,
+                    isCancelled = { Thread.currentThread().isInterrupted },
+                ) { progress ->
+                    val fraction = if (progress.totalBytes > 0L) {
+                        progress.completedBytes.toDouble() / progress.totalBytes
+                    } else 0.0
+                    val currentMb = progress.fileProgress.downloaded / 1_048_576.0
+                    val totalMb = progress.fileProgress.total.takeIf { it > 0L }?.div(1_048_576.0)
+                    val fileText = if (totalMb != null) {
+                        "${formatMb(currentMb)} / ${formatMb(totalMb)} MB"
+                    } else {
+                        "${formatMb(currentMb)} MB"
+                    }
+                    runOnUiThread {
+                        progressBar?.progress = (fraction.coerceIn(0.0, 1.0) * 450).toInt()
+                        statusText?.text =
+                            "Etapa 1/2: baixando e verificando ${progress.currentPath}\n$fileText\n" +
+                                "${formatMb(progress.completedBytes / 1_048_576.0)} / " +
+                                "${formatMb(progress.totalBytes / 1_048_576.0)} MB"
+                    }
+                }
+                if (Thread.currentThread().isInterrupted) {
+                    throw CancellationException("Download dos arquivos vanilla cancelado")
+                }
+                runOnUiThread {
+                    progressBar?.progress = 450
+                    statusText?.text =
+                        "Etapa 1/2 concluída: arquivos oficiais do Minecraft 26.3 verificados.\n" +
+                            "Etapa 2/2: instalando o OpenJDK 25 ARM64 e preparando os recursos do Horizon..."
+                    prepareButton?.text = "Preparando recursos do Horizon..."
+                }
+
                 val destination = VanillaResourcePreparer(this).prepare(
                     isCancelled = { Thread.currentThread().isInterrupted },
                 ) { progress ->
                     runOnUiThread {
                         progress.fraction?.let {
-                            progressBar?.progress = (it.coerceIn(0.0, 1.0) * 1000).toInt()
+                            // 45% is reserved for Mojang downloads; 55% for JDK
+                            // installation and Horizon preparation.
+                            progressBar?.progress =
+                                (450 + it.coerceIn(0.0, 1.0) * 550).toInt()
                         }
-                        statusText?.text = progress.message
+                        statusText?.text = "Etapa 2/2: ${progress.message}"
                     }
                 }
                 runOnUiThread {
                     progressBar?.progress = 1000
-                    statusText?.text = "Recursos vanilla preparados e validados!\nLocal: " + destination.absolutePath
-                    prepareButton?.text = "Recursos vanilla preparados"
+                    statusText?.text =
+                        "DOWNLOAD E PREPARAÇÃO CONCLUÍDOS!\n" +
+                            "Minecraft 26.3: arquivos oficiais verificados.\n" +
+                            "Horizon: manifestos gerados e validação --check aprovada.\n" +
+                            "Arquivos: ${installed.absolutePath}\nRecursos: ${destination.absolutePath}"
+                    prepareButton?.text = "Recursos vanilla concluídos"
                 }
             } catch (error: Throwable) {
                 val cancelled = error is CancellationException || Thread.currentThread().isInterrupted
                 runOnUiThread {
                     statusText?.text = if (cancelled) {
-                        "Preparação cancelada. Execute novamente para continuar."
+                        "Operação cancelada. Os arquivos já verificados são mantidos e os downloads incompletos podem ser retomados."
                     } else {
-                        "Falha na preparação vanilla: " + (error.message ?: error.javaClass.simpleName)
+                        "Falha no download/preparação vanilla: " +
+                            (error.message ?: error.javaClass.simpleName)
                     }
-                    prepareButton?.text = "Tentar preparar novamente"
+                    prepareButton?.text = "Tentar baixar e preparar novamente"
                 }
             } finally {
                 runOnUiThread {
                     workerBusy = false
                     downloadTask = null
                     cancelButton?.visibility = View.GONE
+                    cancelButton?.text = "Cancelar download"
                     downloadButton?.isEnabled = true
                     prepareButton?.isEnabled = true
                 }
