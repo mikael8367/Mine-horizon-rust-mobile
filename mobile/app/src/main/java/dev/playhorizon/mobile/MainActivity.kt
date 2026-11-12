@@ -181,7 +181,7 @@ class MainActivity : Activity() {
                 if (workerBusy) return@setOnClickListener
                 val username = elyUsername.text?.toString()?.trim().orEmpty()
                 val password = elyPassword.text?.toString()?.toCharArray() ?: CharArray(0)
-                val twoFactorCode = elyTwoFactor.text?.toString()?.trim().orEmpty().ifEmpty { null }
+                val twoFactorCode = elyTwoFactor.text?.toString()?.trim().orEmpty().takeIf { it.isNotEmpty() }
                 if (username.isBlank() || password.isEmpty()) {
                     statusText?.text = "Informe o usuário e a senha Ely.by."
                     password.fill('\u0000')
