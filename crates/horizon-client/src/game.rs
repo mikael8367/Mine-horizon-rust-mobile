@@ -9902,7 +9902,16 @@ impl Game<'_> {
             self.physical_buttons.clear();
             self.drag_button = None;
             #[cfg(target_os = "android")]
-            self.android_touch_pointers.clear();
+            {
+                // Android may lose focus while fingers are held (app switch,
+                // notification shade, screen lock). Do not resume with mining,
+                // attack or item use stuck from a touch that can no longer end.
+                self.android_touch_pointers.clear();
+                self.left = false;
+                self.right = false;
+                self.using = None;
+                self.stop_mining();
+            }
         }
         if let WindowEvent::ModifiersChanged(m) = &event {
             self.update_modifiers(m.state());
