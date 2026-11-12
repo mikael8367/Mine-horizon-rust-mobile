@@ -48,7 +48,8 @@ tested before full game-data preparation can be claimed.
   memory, checks exact file sizes, and finalizes verified files atomically.
 - The download button is connected to this pipeline. It does not mark the game
   prepared and does not enable Play.
-- ARM64 Android target cross-check workflow added; app-loadable native engine packaging, Microsoft device-code sign-in/entitlement,
+- Added a `horizon-android` NativeActivity entry point and passed AndroidApp into winit's event-loop builder; Horizon's existing wgpu renderer now has the platform path to acquire the Android window surface. The ARM64 `.so` build and Gradle packaging are wired into CI but remain unverified until that workflow succeeds and the app is tested on a real device.
+- Microsoft device-code sign-in/entitlement,
   Java-25-compatible resource preparation, SAF folder selection, and gameplay
   integration remain incomplete.
 - Never create an APK unless the maintainer explicitly requests one.
@@ -56,8 +57,9 @@ tested before full game-data preparation can be claimed.
 ## Remaining integration sequence
 
 1. Add Microsoft device-code sign-in and Minecraft: Java Edition entitlement validation.
-2. Build the ARM64 Android engine and native bridge in CI; publish a signed/checksummed
-   runtime manifest and compatible native package.
+2. Finish and verify the `horizon-android` ARM64 `.so` build, package it through Gradle,
+   then validate NativeActivity + winit + wgpu surface creation on a real Android device.
+   Publish a signed/checksummed runtime manifest only after device validation.
 3. Implement an Android-compatible Java 25 preparation strategy for Horizon's
    vanilla exporters, or replace those exporter calls with a verified Android-native path.
 4. Validate all prepared resources using Horizon's resource checker.
