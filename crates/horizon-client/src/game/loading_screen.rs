@@ -29,19 +29,7 @@ pub(super) fn run_event_loop(mut game: Game<'_>) -> Result<()> {
         return game.error.take().map_or(Ok(()), Err);
     }
     let mut split = split::Split::new(game);
-    // Android's AndroidApp is passed explicitly to winit; it is not global state.
-    // Desktop keeps the normal EventLoop::new() path.
-    #[cfg(target_os = "android")]
-    let result = {
-        use winit::platform::android::EventLoopBuilderExtAndroid;
-        let mut builder = EventLoop::builder();
-        let app = horizon_client::android_app()
-            .expect("Android entry point must provide AndroidApp before starting Horizon");
-        builder.with_android_app(app);
-        builder.build()?.run_app(&mut split)
-    };
-    #[cfg(not(target_os = "android"))]
-    let result = EventLoop::new()?.run_app(&mut split);
+    let result = horizon_client::create_event_loop()?.run_app(&mut split);
     game = split.host;
     narrator::stop();
     leave_fullscreen_after(&result, &mut game.settings);
