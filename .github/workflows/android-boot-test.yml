@@ -132,14 +132,38 @@ jobs:
           sdkmanager --install "emulator" "platform-tools" "platforms;android-31" "build-tools;35.0.0" "system-images;android-31;google_apis;x86_64" > /dev/null
 
       - name: Create AVD
+        shell: bash
         run: |
+          set -euo pipefail
+          # Recent Android SDK command-line tools store AVDs under ANDROID_USER_HOME,
+          # while the emulator may otherwise search only ~/.android/avd.
+          ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.config/.android}"
+          export ANDROID_USER_HOME
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_USER_HOME=$ANDROID_USER_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
           echo no | avdmanager create avd -n horizon-a12 -k "system-images;android-31;google_apis;x86_64" -d pixel_4 --force
+          test -f "$ANDROID_AVD_HOME/horizon-a12.ini" || test -d "$ANDROID_AVD_HOME/horizon-a12.avd"
           avdmanager list avd
 
       - name: Boot emulator
         shell: bash
         run: |
           set -uo pipefail
+          # Use the exact same AVD directory used by avdmanager in the previous step.
+          ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.config/.android}"
+          export ANDROID_USER_HOME
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+          echo "AVDs visíveis para o emulator:"
+          emulator -list-avds || true
+          if [ ! -f "$ANDROID_AVD_HOME/horizon-a12.ini" ] && [ ! -d "$ANDROID_AVD_HOME/horizon-a12.avd" ]; then
+            echo "AVD horizon-a12 não existe em $ANDROID_AVD_HOME"
+            find "$ANDROID_USER_HOME" -maxdepth 3 \( -name 'horizon-a12.ini' -o -name 'horizon-a12.avd' \) -print || true
+            exit 1
+          fi
           EMU_BIN="$(command -v emulator || true)"
           if [ -z "$EMU_BIN" ] && [ -x "$ANDROID_HOME/emulator/emulator" ]; then EMU_BIN="$ANDROID_HOME/emulator/emulator"; fi
           echo "Usando emulador: ${EMU_BIN:-nenhum}"
@@ -258,7 +282,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add mobile/diagnostics
           if git commit -m "Record Android 12 emulator boot diagnostics [skip ci]"; then
-            git pull --rebase origin mobile/android-port || true
+            git pull --rebase --autostash origin mobile/android-port || true
             git push origin HEAD:mobile/android-port || echo "Falha ao publicar os diagnósticos (conflito de push)."
           else
             echo "Nada novo para registrar."
