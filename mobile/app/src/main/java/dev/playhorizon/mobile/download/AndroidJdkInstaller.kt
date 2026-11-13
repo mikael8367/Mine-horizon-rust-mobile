@@ -176,7 +176,7 @@ class AndroidJdkInstaller(
             val output = StringBuilder()
             val reader = Thread {
                 process.inputStream.bufferedReader().useLines { lines ->
-                    lines.forEach { line -> output.append(line).append('\\n') }
+                    lines.forEach { line -> output.append(line).append('\n') }
                 }
             }.apply { name = "horizon-${tool}-version-check"; isDaemon = true; start() }
 
@@ -192,9 +192,9 @@ class AndroidJdkInstaller(
                     versionOutput.ifBlank { "nenhuma saída; verifique linker/execução ARM64" }
             }
             val isExpectedVersion = when (tool) {
-                "java" -> Regex("""(?m)^(?:openjdk|java) version ["']?25(?:[-+._][^"'\\s]*)?["']?""")
+                "java" -> Regex("""(?m)^(?:openjdk|java) version ["']?25(?:[-+._][^"'\s]*)?["']?""")
                     .containsMatchIn(versionOutput)
-                "javac" -> Regex("""(?m)^javac\\s+25(?:[-+._][^\\s]*)?""")
+                "javac" -> Regex("""(?m)^javac\s+25(?:[-+._][^\s]*)?""")
                     .containsMatchIn(versionOutput)
                 else -> false
             }
