@@ -13,6 +13,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.text.InputType
 import dev.playhorizon.mobile.account.ElyByAccountStore
+import dev.playhorizon.mobile.diagnostics.CrashDiagnostics
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RadioButton
@@ -47,10 +48,16 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Primeiro código do app: qualquer exceção a partir daqui fica registrada
+        // em filesDir/horizon-diagnostics/ e mostrada na tela na próxima abertura.
+        CrashDiagnostics.install(this)
+        CrashDiagnostics.stage(this, "launcher_on_create",
+            "process=${System.currentTimeMillis()} sdk=${Build.VERSION.SDK_INT} abi=${Build.SUPPORTED_ABIS.firstOrNull()}")
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         enterImmersiveLandscape()
         selectedAccountMode = getSharedPreferences("horizon_launcher", MODE_PRIVATE).getString("account_mode", "offline") ?: "offline"
         buildDownloadScreen()
+        CrashDiagnostics.stage(this, "launcher_ui_mounted", "tela de download montada e exibida")
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -71,6 +78,7 @@ class MainActivity : Activity() {
             val lines = runCatching { statusFile.readLines(Charsets.UTF_8) }.getOrDefault(emptyList())
             val stage = lines.firstOrNull().orEmpty()
             val detail = lines.drop(1).joinToString(" ").trim()
+            CrashDiagnostics.stage(this@MainActivity, "launcher_native_status", "$stage | $detail")
             statusText?.text = when (stage) {
                 "game_client_ready" ->
                     "SUCESSO: o motor carregou os recursos, criou o renderer principal e chegou ao menu do jogo.\n" +
@@ -93,7 +101,15 @@ class MainActivity : Activity() {
                 "native_entry_started" -> "NativeActivity iniciou, mas o motor não avançou para a validação dos recursos."
                 else -> "O motor nativo foi fechado sem registrar a primeira tela. Confira o log de inicialização."
             }
+        } else {
+            // Sem abertura do motor nesta ou na última execução: se o app fechou
+            // sozinho antes, mostra o motivo real registrado pelo capturador.
+            val lastCrash = CrashDiagnostics.lastCrashSummary(this)
+            if (lastCrash != null) {
+                statusText?.text = "A execução anterior fechou inesperadamente. Registro salvo:\n$lastCrash"
+            }
         }
+        CrashDiagnostics.stage(this, "launcher_resumed")
     }
 
     override fun onDestroy() {
@@ -323,6 +339,8 @@ class MainActivity : Activity() {
             text = "Abrir motor Rust em tela cheia"
             setOnClickListener {
                 val nativeLibrary = File(applicationInfo.nativeLibraryDir, "libhorizon_android.so")
+                CrashDiagnostics.stage(this@MainActivity, "engine_library_check",
+                    "lib=${nativeLibrary.isFile} dir=${applicationInfo.nativeLibraryDir}")
                 if (!nativeLibrary.isFile) {
                     statusText?.text = "Biblioteca ARM64 ainda não foi incluída. Aguarde a compilação do CI."
                     return@setOnClickListener
@@ -352,11 +370,15 @@ class MainActivity : Activity() {
                     getSharedPreferences("horizon_launcher", MODE_PRIVATE).edit()
                         .putBoolean("native_launch_pending", true).apply()
                     nativeEngineOpened = true
+                    CrashDiagnostics.stage(this@MainActivity, "engine_launch_requested",
+                        "NativeActivity será aberta com a biblioteca presente")
                     startActivity(Intent(this@MainActivity, android.app.NativeActivity::class.java))
                 } catch (error: Throwable) {
                     nativeEngineOpened = false
                     getSharedPreferences("horizon_launcher", MODE_PRIVATE).edit()
                         .putBoolean("native_launch_pending", false).apply()
+                    CrashDiagnostics.stage(this@MainActivity, "engine_launch_failed",
+                        "${error.javaClass.simpleName}: ${error.message ?: ""}")
                     statusText?.text = "Não foi possível abrir o motor nativo: " + (error.message ?: error.javaClass.simpleName)
                 }
             }
@@ -413,6 +435,7 @@ class MainActivity : Activity() {
     private fun startMinecraftDownload() {
         if (workerBusy) return
         workerBusy = true
+        CrashDiagnostics.stage(this, "minecraft_download_started")
         downloadButton?.isEnabled = false
         downloadButton?.text = "Preparando download..."
         progressBar?.progress = 0
@@ -455,6 +478,10 @@ class MainActivity : Activity() {
                 }
             } catch (error: Throwable) {
                 val wasCancelled = error is CancellationException || Thread.currentThread().isInterrupted
+                if (!wasCancelled) {
+                    CrashDiagnostics.stage(this@MainActivity, "minecraft_download_failed",
+                        "${error.javaClass.simpleName}: ${error.message ?: ""}")
+                }
                 runOnUiThread {
                     statusText?.text = if (wasCancelled) {
                         "Download cancelado. Os arquivos temporários podem ser retomados."
@@ -477,6 +504,7 @@ class MainActivity : Activity() {
     private fun startVanillaPreparation() {
         if (workerBusy) return
         workerBusy = true
+        CrashDiagnostics.stage(this, "vanilla_prepare_started")
         downloadButton?.isEnabled = false
         prepareButton?.isEnabled = false
         prepareButton?.text = "Baixando arquivos oficiais..."
@@ -549,6 +577,10 @@ class MainActivity : Activity() {
                 }
             } catch (error: Throwable) {
                 val cancelled = error is CancellationException || Thread.currentThread().isInterrupted
+                if (!cancelled) {
+                    CrashDiagnostics.stage(this@MainActivity, "vanilla_prepare_failed",
+                        "${error.javaClass.simpleName}: ${error.message ?: ""}")
+                }
                 runOnUiThread {
                     statusText?.text = if (cancelled) {
                         "Operação cancelada. Os arquivos já verificados são mantidos e os downloads incompletos podem ser retomados."
@@ -601,3 +633,4 @@ class MainActivity : Activity() {
         }
     }
 }
+
