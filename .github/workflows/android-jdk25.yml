@@ -133,6 +133,11 @@ jobs:
         shell: bash
         run: grep -n -- "--disable-jsound" build_jdk.sh
 
+      - name: Install Android NDK for ARM64 C++ runtime
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "ndk;27.2.12479018"
+
       - name: Build full OpenJDK 25 for Android ARM64
         working-directory: android-openjdk
         shell: bash
@@ -210,6 +215,29 @@ jobs:
           mkdir -p runtime-package/jdk
           cp -a jdkout/. runtime-package/jdk/
           chmod +x runtime-package/jdk/bin/java runtime-package/jdk/bin/javac
+
+          # The FCL Android OpenJDK launchers are linked against libc++_shared.so.
+          # Bundle the matching Android NDK ARM64 C++ runtime beside the JDK's
+          # other private libraries; Android's system linker will find it through
+          # the app-provided LD_LIBRARY_PATH ($JAVA_HOME/lib).
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          CXX_RUNTIME="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
+          test -s "$CXX_RUNTIME"
+          install -m 0644 "$CXX_RUNTIME" runtime-package/jdk/lib/libc++_shared.so
+          file runtime-package/jdk/lib/libc++_shared.so
+          readelf -h runtime-package/jdk/lib/libc++_shared.so | grep -E 'Class:.*ELF64'
+          readelf -h runtime-package/jdk/lib/libc++_shared.so | grep -E 'Machine:.*AArch64'
+
+          # Fail the release build if either launcher has an unaccounted
+          # non-platform dependency. This catches missing runtime libraries
+          # before users download an APK.
+          for launcher in runtime-package/jdk/bin/java runtime-package/jdk/bin/javac; do
+            echo "Dependencies for $launcher:"
+            readelf -d "$launcher" | grep 'NEEDED' || true
+            if readelf -d "$launcher" | grep -q 'Shared library: \[libc++_shared.so\]'; then
+              test -s runtime-package/jdk/lib/libc++_shared.so
+            fi
+          done
           (cd runtime-package && zip -qr -9 ../horizon-jdk25-android-arm64.zip jdk)
           SHA="$(sha256sum horizon-jdk25-android-arm64.zip | cut -d' ' -f1)"
           cat > runtime.json <<EOF
