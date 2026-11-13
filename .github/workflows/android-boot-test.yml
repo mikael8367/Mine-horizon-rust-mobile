@@ -23,39 +23,51 @@ concurrency:
   group: android-boot-test-${{ github.ref }}
   cancel-in-progress: true
 
-# Boots the CI-built APK on an Android 12 (API 31) emulator, launches the
-# launcher activity exactly as a tap on the app icon does, and keeps the
-# process alive check plus the full logcat as evidence. The logcat is also
-# committed back to mobile/diagnostics/ so the crash (if any) can be read
-# from the repository without a physical device.
+# Boots the CI-built APK on an Android 12 (API 31) x86_64 emulator with KVM
+# and SwiftShader. The test APK carries both arm64-v8a (Galaxy A12) and
+# x86_64 (emulator) native libraries so the launcher can really start in CI.
+# It launches the launcher activity exactly as a tap on the app icon does,
+# checks process liveness after 30 s, and records the crash buffer, the full
+# logcat, the native startup status file and the launcher diagnostics, all
+# committed back to mobile/diagnostics/ so failures can be read from the
+# repository without a physical device.
 jobs:
   boot-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust Android target
+      - name: Install Rust Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android x86_64-linux-android
 
       - name: Install Android NDK
         uses: android-actions/setup-android@v3
         with:
           packages: "ndk;27.2.12479018"
 
-      - name: Configure Android ARM64 linker
+      - name: Configure Android linkers (ARM64 and x86_64)
         shell: bash
         run: |
           NDK="$ANDROID_HOME/ndk/27.2.12479018"
           test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
-          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" >> "$GITHUB_ENV"
-          echo "CC_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" >> "$GITHUB_ENV"
-          echo "AR_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> "$GITHUB_ENV"
+          test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
+          {
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+            echo "CC_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+            echo "AR_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+            echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
+            echo "CC_x86_64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
+            echo "AR_x86_64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          } >> "$GITHUB_ENV"
 
       - name: Build Horizon Rust renderer for Android ARM64
         run: cargo build --release --target aarch64-linux-android -p horizon-android
+
+      - name: Build Horizon Rust renderer for Android x86_64 (emulator)
+        run: cargo build --release --target x86_64-linux-android -p horizon-android
 
       - name: Build Horizon vanilla preparer for Android ARM64
         run: cargo build --release --target aarch64-linux-android -p horizon-prepare
@@ -76,11 +88,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          LIBDIR="mobile/app/src/main/jniLibs/arm64-v8a"
-          mkdir -p "$LIBDIR"
-          cp target/aarch64-linux-android/release/libhorizon_android.so "$LIBDIR/"
-          file "$LIBDIR/libhorizon_android.so"
-          readelf -h "$LIBDIR/libhorizon_android.so" | grep -E 'Machine:.*AArch64'
+          mkdir -p mobile/app/src/main/jniLibs/arm64-v8a mobile/app/src/main/jniLibs/x86_64
+          cp target/aarch64-linux-android/release/libhorizon_android.so mobile/app/src/main/jniLibs/arm64-v8a/
+          cp target/x86_64-linux-android/release/libhorizon_android.so mobile/app/src/main/jniLibs/x86_64/
+          file mobile/app/src/main/jniLibs/arm64-v8a/libhorizon_android.so mobile/app/src/main/jniLibs/x86_64/libhorizon_android.so
+          readelf -h mobile/app/src/main/jniLibs/arm64-v8a/libhorizon_android.so | grep -E "Machine:.*AArch64"
+          readelf -h mobile/app/src/main/jniLibs/x86_64/libhorizon_android.so | grep -E "Machine:.*x86-64"
 
       - uses: actions/setup-java@v4
         with:
@@ -102,7 +115,7 @@ jobs:
           APK="mobile/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E "package:|launchable-activity|sdkVersion|targetSdkVersion|native-code" || true
-          unzip -Z1 "$APK" | grep -F "lib/arm64-v8a/" || true
+          unzip -Z1 "$APK" | grep -E "lib/arm64-v8a/|lib/x86_64/" || true
 
       - name: Enable KVM
         run: |
@@ -121,24 +134,52 @@ jobs:
           avdmanager list avd
 
       - name: Boot emulator
+        shell: bash
         run: |
-          emulator -avd horizon-a12 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -no-snapshot -camera-back none -camera-front none > emulator-boot.log 2>&1 &
-          adb wait-for-device
-          timeout 900 bash -c 'while [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" != "1" ]; do sleep 10; done'
+          set -uo pipefail
+          EMU_BIN="$(command -v emulator || true)"
+          if [ -z "$EMU_BIN" ] && [ -x "$ANDROID_HOME/emulator/emulator" ]; then EMU_BIN="$ANDROID_HOME/emulator/emulator"; fi
+          echo "Usando emulador: ${EMU_BIN:-nenhum}"
+          if [ -z "$EMU_BIN" ]; then
+            echo "Binário do emulador não encontrado no PATH nem em $ANDROID_HOME/emulator"
+            ls -la "$ANDROID_HOME/emulator" 2>/dev/null || true
+            exit 1
+          fi
+          "$EMU_BIN" -avd horizon-a12 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -no-snapshot -camera-back none -camera-front none > emulator-boot.log 2>&1 &
+          if ! timeout 180 adb wait-for-device; then
+            echo "adb wait-for-device falhou; últimas linhas do log do emulador:"
+            tail -n 100 emulator-boot.log || true
+            exit 1
+          fi
+          if ! timeout 600 bash -c 'while [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" != "1" ]; do sleep 10; done'; then
+            echo "Emulador não concluiu o boot em 10 minutos; últimas linhas do log:"
+            tail -n 100 emulator-boot.log || true
+            exit 1
+          fi
+          adb devices
           echo "Android release: $(adb shell getprop ro.build.version.release | tr -d '\r')"
           echo "Android SDK: $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
           echo "ABI list: $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
 
       - name: Install APK and launch the launcher
+        shell: bash
         run: |
-          adb install -r mobile/app/build/outputs/apk/debug/app-debug.apk
+          set -uo pipefail
+          if ! adb install -r mobile/app/build/outputs/apk/debug/app-debug.apk; then
+            echo "Falha ao instalar o APK no emulador"
+            exit 1
+          fi
           adb logcat -c
-          adb shell am start -W -n dev.playhorizon.mobile/.MainActivity
+          adb shell am start -W -n dev.playhorizon.mobile/.MainActivity || true
           sleep 30
           adb shell pidof dev.playhorizon.mobile > app-pid.txt || true
           adb logcat -d -b crash > emulator-crash-buffer.txt || true
           adb logcat -d -t 12000 > emulator-logcat.txt
-          echo "PID after 30s: $(cat app-pid.txt)"
+          adb shell "run-as dev.playhorizon.mobile cat files/horizon-startup-status.txt 2>/dev/null" > startup-status.txt || true
+          adb shell "run-as dev.playhorizon.mobile cat files/horizon-diagnostics/launch-log.txt 2>/dev/null" > launch-log-device.txt || true
+          echo "PID after 30s: $(cat app-pid.txt 2>/dev/null || echo vazio)"
+          echo "Status de inicialização nativa:"
+          cat startup-status.txt 2>/dev/null || echo "(sem arquivo de status)"
           adb shell dumpsys activity activities | grep -E "dev.playhorizon" | head -10 || true
 
       - name: Verdict
@@ -146,14 +187,19 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p mobile/diagnostics
-          PID="$(tr -d '\r[:space:]' < app-pid.txt)"
+          PID="$(tr -d '\r[:space:]' < app-pid.txt 2>/dev/null || true)"
           {
-            echo "Emulador: Android 12 (API 31), x86_64 com tradução ARM, GPU SwiftShader."
-            echo "APK: app-debug.apk (arm64-v8a), instalado e iniciado com am start."
+            echo "Emulador: Android 12 (API 31), x86_64 com KVM, GPU SwiftShader."
+            echo "APK: app-debug.apk (arm64-v8a + x86_64), instalado e iniciado com am start."
+            echo "Observação: valida ciclo de vida, JNI e boot do motor; a GPU real do Galaxy A12 (PowerVR GE8320) só pode ser validada no aparelho físico."
             if [ -n "$PID" ]; then
               echo "RESULTADO: o launcher permaneceu aberto (pid $PID) 30 s após a abertura."
             else
               echo "RESULTADO: FALHA. O processo não estava vivo 30 s após a abertura."
+            fi
+            if [ -s startup-status.txt ]; then
+              echo "Status nativo de inicialização:"
+              cat startup-status.txt
             fi
             if [ -s emulator-crash-buffer.txt ]; then
               echo "Buffer de crash do logcat não vazio; primeiras ocorrências:"
@@ -179,6 +225,9 @@ jobs:
           cp emulator-crash-buffer.txt mobile/diagnostics/emulator-crash-buffer.txt 2>/dev/null || true
           cp emulator-logcat.txt mobile/diagnostics/emulator-logcat.txt 2>/dev/null || true
           cp emulator-boot.log mobile/diagnostics/emulator-boot.log 2>/dev/null || true
+          cp startup-status.txt mobile/diagnostics/emulator-startup-status.txt 2>/dev/null || true
+          cp launch-log-device.txt mobile/diagnostics/emulator-launch-log.txt 2>/dev/null || true
+          cp app-pid.txt mobile/diagnostics/emulator-app-pid.txt 2>/dev/null || true
           git config user.name "Horizon CI"
           git config user.email "actions@users.noreply.github.com"
           git add mobile/diagnostics
