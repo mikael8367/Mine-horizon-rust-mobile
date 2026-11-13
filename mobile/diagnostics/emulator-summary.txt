@@ -1,54 +1,6 @@
 Emulador: Android 12 (API 31), x86_64 com KVM, GPU SwiftShader.
 APK: app-debug.apk (arm64-v8a + x86_64), instalado e iniciado com am start.
 Observação: valida ciclo de vida, JNI e boot do motor; a GPU real do Galaxy A12 (PowerVR GE8320) só pode ser validada no aparelho físico.
-RESULTADO LAUNCHER: FALHA. O processo não estava vivo 30 s após a abertura.
+RESULTADO LAUNCHER: permaneceu aberto (pid 2634) 30 s após a abertura.
 RESULTADO MOTOR: NÃO TESTADO. O componente NativeActivity não é exportado; o shell do emulador não pode iniciá-lo diretamente.
 SKIPPED: NativeActivity is not exported; engine must be launched by MainActivity.
-Crash log privado do launcher:
-================ CRASH ================
-[2026-11-13 03:53:31.742] FATAL EXCEPTION na thread "main" (id 2)
-java.lang.RuntimeException: Unable to start activity ComponentInfo{dev.playhorizon.mobile/dev.playhorizon.mobile.MainActivity}: java.lang.NullPointerException: Attempt to invoke virtual method 'android.view.WindowInsetsController com.android.internal.policy.DecorView.getWindowInsetsController()' on a null object reference
-java.lang.RuntimeException: Unable to start activity ComponentInfo{dev.playhorizon.mobile/dev.playhorizon.mobile.MainActivity}: java.lang.NullPointerException: Attempt to invoke virtual method 'android.view.WindowInsetsController com.android.internal.policy.DecorView.getWindowInsetsController()' on a null object reference
-	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3635)
-	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3792)
-	at android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)
-	at android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:135)
-	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:95)
-	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2210)
-	at android.os.Handler.dispatchMessage(Handler.java:106)
-	at android.os.Looper.loopOnce(Looper.java:201)
-	at android.os.Looper.loop(Looper.java:288)
-	at android.app.ActivityThread.main(ActivityThread.java:7839)
-	at java.lang.reflect.Method.invoke(Native Method)
-	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:548)
-	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1003)
-Caused by: java.lang.NullPointerException: Attempt to invoke virtual method 'android.view.WindowInsetsController com.android.internal.policy.DecorView.getWindowInsetsController()' on a null object reference
-	at com.android.internal.policy.PhoneWindow.getInsetsController(PhoneWindow.java:3914)
-	at dev.playhorizon.mobile.MainActivity.enterImmersiveLandscape(MainActivity.kt:618)
-	at dev.playhorizon.mobile.MainActivity.onCreate(MainActivity.kt:57)
-	at android.app.Activity.performCreate(Activity.java:8051)
-	at android.app.Activity.performCreate(Activity.java:8031)
-	at android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1329)
-	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3608)
-	... 12 more
-Causada por: java.lang.NullPointerException: Attempt to invoke virtual method 'android.view.WindowInsetsController com.android.internal.policy.DecorView.getWindowInsetsController()' on a null object reference
-java.lang.NullPointerException: Attempt to invoke virtual method 'android.view.WindowInsetsController com.android.internal.policy.DecorView.getWindowInsetsController()' on a null object reference
-	at com.android.internal.policy.PhoneWindow.getInsetsController(PhoneWindow.java:3914)
-	at dev.playhorizon.mobile.MainActivity.enterImmersiveLandscape(MainActivity.kt:618)
-	at dev.playhorizon.mobile.MainActivity.onCreate(MainActivity.kt:57)
-	at android.app.Activity.performCreate(Activity.java:8051)
-	at android.app.Activity.performCreate(Activity.java:8031)
-	at android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1329)
-	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3608)
-	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3792)
-	at android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)
-	at android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:135)
-	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:95)
-	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2210)
-	at android.os.Handler.dispatchMessage(Handler.java:106)
-	at android.os.Looper.loopOnce(Looper.java:201)
-	at android.os.Looper.loop(Looper.java:288)
-	at android.app.ActivityThread.main(ActivityThread.java:7839)
-	at java.lang.reflect.Method.invoke(Native Method)
-	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:548)
-	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1003)
