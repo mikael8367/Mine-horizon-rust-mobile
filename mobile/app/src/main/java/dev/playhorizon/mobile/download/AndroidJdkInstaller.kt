@@ -44,9 +44,15 @@ class AndroidJdkInstaller(
         val javaHome = File(runtimeRoot, "jdk")
         val java = File(javaHome, "bin/java")
         val javac = File(javaHome, "bin/javac")
-        if (java.isFile && javac.isFile && isJava25(java, "java") && isJava25(javac, "javac")) {
-            onMessage("OpenJDK 25 ARM64 já está instalado e validado.")
-            return javaHome
+        if (java.isFile && javac.isFile) {
+            val javaFailure = java25Failure(java, "java")
+            val javacFailure = java25Failure(javac, "javac")
+            if (javaFailure == null && javacFailure == null) {
+                onMessage("OpenJDK 25 ARM64 já está instalado e validado.")
+                return javaHome
+            }
+            onMessage("Runtime Java existente inválido; será reinstalado. " +
+                listOfNotNull(javaFailure, javacFailure).joinToString(" | "))
         }
 
         val archive = File(filesDir, "cache/$ARCHIVE_NAME")
@@ -76,8 +82,11 @@ class AndroidJdkInstaller(
             }
             stagedJava.setExecutable(true, true)
             stagedJavac.setExecutable(true, true)
-            require(isJava25(stagedJava, "java") && isJava25(stagedJavac, "javac")) {
-                "O runtime instalado não executa como Java 25"
+            val javaFailure = java25Failure(stagedJava, "java")
+            val javacFailure = java25Failure(stagedJavac, "javac")
+            require(javaFailure == null && javacFailure == null) {
+                "O runtime instalado não executa como Java 25. " +
+                    listOfNotNull(javaFailure, javacFailure).joinToString(" | ")
             }
 
             if (runtimeRoot.exists()) check(runtimeRoot.deleteRecursively()) {
@@ -140,26 +149,61 @@ class AndroidJdkInstaller(
         require(entries > 0) { "Arquivo do Java vazio" }
     }
 
-    private fun isJava25(executable: File, tool: String): Boolean {
+    /**
+     * Runs the Android JDK launchers and preserves their actual linker/runtime
+     * diagnostics. libjli.so lives in lib/jli on this JDK layout; omitting that
+     * directory from LD_LIBRARY_PATH can make java fail before printing a version.
+     */
+    private fun java25Failure(executable: File, tool: String): String? {
         return try {
-            val home = executable.parentFile?.parentFile ?: return false
-            val builder = ProcessBuilder(executable.absolutePath, "-version").redirectErrorStream(true)
+            val home = executable.parentFile?.parentFile
+                ?: return "caminho do $tool inválido: ${executable.absolutePath}"
+            val builder = ProcessBuilder(executable.absolutePath, "-version")
+                .redirectErrorStream(true)
             builder.environment()["JAVA_HOME"] = home.absolutePath
-            builder.environment()["LD_LIBRARY_PATH"] = listOf(
+            val inherited = builder.environment()["LD_LIBRARY_PATH"].orEmpty()
+                .split(File.pathSeparator)
+                .filter { it.isNotBlank() }
+            val libraryPaths = listOf(
+                File(home, "lib/jli").absolutePath,
                 File(home, "lib").absolutePath,
                 File(home, "lib/server").absolutePath,
-                builder.environment()["LD_LIBRARY_PATH"].orEmpty(),
-            ).filter { it.isNotBlank() }.joinToString(File.pathSeparator)
+            ) + inherited
+            builder.environment()["LD_LIBRARY_PATH"] = libraryPaths.distinct()
+                .joinToString(File.pathSeparator)
+
             val process = builder.start()
+            val output = StringBuilder()
+            val reader = Thread {
+                process.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { line -> output.append(line).append('\\n') }
+                }
+            }.apply { name = "horizon-${tool}-version-check"; isDaemon = true; start() }
+
             if (!process.waitFor(20, TimeUnit.SECONDS)) {
                 process.destroyForcibly()
-                return false
+                reader.join(1_000)
+                return "$tool -version excedeu o limite de 20 segundos"
             }
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            process.exitValue() == 0 && output.contains("25") &&
-                (tool != "javac" || output.contains("javac"))
-        } catch (_: Throwable) {
-            false
+            reader.join(2_000)
+            val versionOutput = output.toString().trim()
+            if (process.exitValue() != 0) {
+                return "$tool -version terminou com código ${process.exitValue()}: " +
+                    versionOutput.ifBlank { "nenhuma saída; verifique linker/execução ARM64" }
+            }
+            val isExpectedVersion = when (tool) {
+                "java" -> Regex("""(?m)^(?:openjdk|java) version ["']?25(?:[-+._][^"'\\s]*)?["']?""")
+                    .containsMatchIn(versionOutput)
+                "javac" -> Regex("""(?m)^javac\\s+25(?:[-+._][^\\s]*)?""")
+                    .containsMatchIn(versionOutput)
+                else -> false
+            }
+            if (isExpectedVersion) null
+            else "$tool não informou versão 25; saída: " +
+                versionOutput.ifBlank { "vazia" }
+        } catch (error: Throwable) {
+            "$tool não iniciou (${error.javaClass.simpleName}): " +
+                (error.message ?: "sem detalhe")
         }
     }
 
