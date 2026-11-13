@@ -142,6 +142,30 @@ jobs:
           APK_ENTRIES="$(unzip -Z1 "$APK")"
           grep -Fx "lib/arm64-v8a/libhorizon_android.so" <<< "$APK_ENTRIES" >/dev/null
           echo "Validated installable ARM64 debug APK: $APK"
+      - name: Verify ARM64 native libraries were merged
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_DIR="mobile/app/src/main/jniLibs/arm64-v8a"
+          MERGED_DIR="mobile/app/build/intermediates/merged_native_libs/debug"
+          test -s "$SOURCE_DIR/libhorizon_android.so"
+          mapfile -t SOURCE_LIBS < <(find "$SOURCE_DIR" -maxdepth 1 -type f -name '*.so' -printf '%f\n' | sort)
+          mapfile -t MERGED_LIBS < <(find "$MERGED_DIR" -type f -path '*/lib/arm64-v8a/*.so' -printf '%f\n' | sort -u)
+          if [ "${SOURCE_LIBS[*]}" != "${MERGED_LIBS[*]}" ]; then
+            echo "Source and Gradle-merged ARM64 native libraries differ."
+            echo "Source: ${SOURCE_LIBS[*]}"
+            echo "Merged: ${MERGED_LIBS[*]}"
+            exit 1
+          fi
+          for name in "${SOURCE_LIBS[@]}"; do
+            mapfile -t COPIES < <(find "$MERGED_DIR" -type f -path "*/lib/arm64-v8a/$name" -print)
+            if [ "${#COPIES[@]}" -ne 1 ]; then
+              echo "Expected exactly one merged copy of $name; found ${#COPIES[@]}."
+              exit 1
+            fi
+            cmp --silent "$SOURCE_DIR/$name" "${COPIES[0]}"
+          done
+          echo "Verified all ARM64 runtime libraries merged byte-for-byte."
       - name: Publish installable Android APK
         uses: actions/upload-artifact@v4
         with:
@@ -167,30 +191,6 @@ jobs:
             - Execução: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
             Este build é independente dos demais; cada execução recebe uma Release/tag própria.
-      - name: Verify ARM64 native libraries were merged
-        shell: bash
-        run: |
-          set -euo pipefail
-          SOURCE_DIR="mobile/app/src/main/jniLibs/arm64-v8a"
-          MERGED_DIR="mobile/app/build/intermediates/merged_native_libs/debug"
-          test -s "$SOURCE_DIR/libhorizon_android.so"
-          mapfile -t SOURCE_LIBS < <(find "$SOURCE_DIR" -maxdepth 1 -type f -name '*.so' -printf '%f\n' | sort)
-          mapfile -t MERGED_LIBS < <(find "$MERGED_DIR" -type f -path '*/lib/arm64-v8a/*.so' -printf '%f\n' | sort -u)
-          if [ "${SOURCE_LIBS[*]}" != "${MERGED_LIBS[*]}" ]; then
-            echo "Source and Gradle-merged ARM64 native libraries differ."
-            echo "Source: ${SOURCE_LIBS[*]}"
-            echo "Merged: ${MERGED_LIBS[*]}"
-            exit 1
-          fi
-          for name in "${SOURCE_LIBS[@]}"; do
-            mapfile -t COPIES < <(find "$MERGED_DIR" -type f -path "*/lib/arm64-v8a/$name" -print)
-            if [ "${#COPIES[@]}" -ne 1 ]; then
-              echo "Expected exactly one merged copy of $name; found ${#COPIES[@]}."
-              exit 1
-            fi
-            cmp --silent "$SOURCE_DIR/$name" "${COPIES[0]}"
-          done
-          echo "Verified all ARM64 runtime libraries merged byte-for-byte."
       - name: Publish Android ARM64 native runtime libraries
         uses: actions/upload-artifact@v4
         with:

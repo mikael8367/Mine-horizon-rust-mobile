@@ -4,7 +4,7 @@
 use super::*;
 
 /// Persist Android startup milestones so the launcher can report where startup stopped.
-fn android_startup_status(stage: &str, detail: &str) {
+pub(super) fn android_startup_status(stage: &str, detail: &str) {
     #[cfg(target_os = "android")]
     {
         let Ok(directory) = std::env::current_dir() else { return };

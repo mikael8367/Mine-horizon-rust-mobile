@@ -3,6 +3,7 @@
 //! `LoaderMsg`), the world's rest loader and a pending world entry, the ordinary launch
 //! (`run_loading`) and the smoke run's report (`write_report`).
 use super::*;
+use super::loading_screen::android_startup_status;
 
 /// CPU-only startup data, owned by one loader generation. No file reads or
 /// model baking are needed when the event loop installs this bundle.
@@ -298,7 +299,19 @@ pub(super) fn run_loading(
         error: None,
     };
     let mut app = App::Loading(Box::new(loading));
-    let result = EventLoop::new()?.run_app(&mut app);
+    // On Android, winit's `EventLoop::new` requires the launcher's `AndroidApp`
+    // (`with_android_app`) and panics without it. Build the loop through
+    // `horizon_client::create_event_loop`, which supplies it on every platform,
+    // and record the milestones the launcher's status file reads.
+    let event_loop = match horizon_client::create_event_loop() {
+        Ok(event_loop) => event_loop,
+        Err(error) => {
+            android_startup_status("event_loop_failed", &error.to_string());
+            return Err(error.into());
+        }
+    };
+    android_startup_status("event_loop_ready", "Event loop do winit criado.");
+    let result = event_loop.run_app(&mut app);
     narrator::stop();
     match &mut app {
         // Ready: splitscreen around P1's game.
