@@ -26,7 +26,7 @@ jobs:
           ref: Build_JRE_25
           path: android-openjdk
 
-      - name: Patch Android getifaddrs compatibility after upstream reset
+      - name: Patch Android getifaddrs compatibility and disable jsound
         working-directory: android-openjdk
         shell: bash
         run: |
@@ -107,10 +107,31 @@ jobs:
           fallback = chr(10).join(line[10:] if line.startswith("          ") else line for line in fallback.splitlines()) + chr(10)
           if anchor not in text:
               raise SystemExit("Could not find Android patch application command in build_jdk.sh")
+          changed = False
           if "PY_ANDROID_IFADDRS" not in text:
               text = text.replace(anchor, fallback, 1)
+              changed = True
+          # Official switch: jdk25u's make/autoconf/jdk-options.m4 exposes
+          # --disable-jsound (UTIL_ARG_ENABLE NAME: jsound, RESULT: ENABLE_JSOUND).
+          # java.desktop/Lib.gmk only defines BUILD_LIBJSOUND inside
+          # ifeq ($(ENABLE_JSOUND), true), so this removes ALSA from the build
+          # regardless of which Lib.gmk revision is checked out. The Lib.gmk
+          # guard above stays as a second layer of defense.
+          cfg_anchor = "    --enable-headless-only=yes \\"
+          if "--disable-jsound" not in text:
+              if cfg_anchor not in text:
+                  raise SystemExit("Could not find --enable-headless-only=yes in build_jdk.sh")
+              text = text.replace(cfg_anchor, cfg_anchor + "\n    --disable-jsound \\", 1)
+              changed = True
+          if changed:
               script.write_text(text)
+          print("build_jdk.sh patched: getifaddrs fallback installed and jsound disabled")
           PY
+
+      - name: Show the patched configure invocation
+        working-directory: android-openjdk
+        shell: bash
+        run: grep -n -- "--disable-jsound" build_jdk.sh
 
       - name: Build full OpenJDK 25 for Android ARM64
         working-directory: android-openjdk
@@ -125,6 +146,18 @@ jobs:
           file jdkout/bin/java jdkout/bin/javac
           readelf -h jdkout/bin/java | grep -E 'Machine:.*AArch64'
           readelf -h jdkout/bin/javac | grep -E 'Machine:.*AArch64'
+
+      - name: Verify jsound was disabled in the JDK configuration
+        if: always()
+        working-directory: android-openjdk
+        shell: bash
+        run: |
+          SPEC="openjdk/build/linux-aarch64-server-release/spec.gmk"
+          if [ -f "$SPEC" ]; then
+            grep -n "^ENABLE_JSOUND" "$SPEC" || echo "ENABLE_JSOUND ausente do spec.gmk"
+          else
+            echo "spec.gmk ainda nao existe (configure nao rodou)."
+          fi
 
       - name: Show why the upstream JDK build failed
         if: failure()
@@ -166,6 +199,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add mobile/diagnostics/jdk-build-failure.log
           git commit -m "diagnostics: registrar falha da build do OpenJDK 25 ARM64 [skip ci]" || echo "nothing to commit"
+          git pull --rebase origin mobile/android-port || true
           git push origin HEAD:mobile/android-port
 
       - name: Package JDK and generate integrity manifest
@@ -189,6 +223,11 @@ jobs:
           }
           EOF
           unzip -l horizon-jdk25-android-arm64.zip | grep -E 'jdk/bin/(java|javac)$'
+          if unzip -l horizon-jdk25-android-arm64.zip | grep -q 'libjsound'; then
+            echo "AVISO: libjsound presente no pacote mesmo com jsound desativado."
+          else
+            echo "OK: pacote sem libjsound."
+          fi
           cat runtime.json
 
       - name: Publish versioned Android JDK runtime assets
