@@ -83,6 +83,26 @@ jobs:
               raise SystemExit("Android getifaddrs compatibility patch validation failed")
           source.write_text(code)
           PY_ANDROID_IFADDRS
+
+          python3 - <<'PY_ANDROID_LIBJSOUND'
+          from pathlib import Path
+          import glob
+          gmk = Path("make/modules/java.desktop/Lib.gmk")
+          code = gmk.read_text()
+          if "TARGETS += $(BUILD_LIBJSOUND)" in code and "# TARGETS += $(BUILD_LIBJSOUND)" not in code:
+              code = code.replace("TARGETS += $(BUILD_LIBJSOUND)", "# TARGETS += $(BUILD_LIBJSOUND) (disabled for Android: no ALSA userland)", 1)
+              gmk.write_text(code)
+              print("Android build: libjsound disabled (no ALSA userland on Android)")
+          else:
+              print("Android build: libjsound target not found or already disabled")
+          rejs = sorted(glob.glob("**/*.rej", recursive=True))
+          if rejs:
+              print("Android patch rejects: %d" % len(rejs))
+              for r in rejs[:30]:
+                  print("  REJ:", r)
+          else:
+              print("Android patch applied with no rejects")
+          PY_ANDROID_LIBJSOUND
           '''
           fallback = chr(10).join(line[10:] if line.startswith("          ") else line for line in fallback.splitlines()) + chr(10)
           if anchor not in text:
@@ -132,7 +152,12 @@ jobs:
           set -euo pipefail
           mkdir -p repo-diagnostics/mobile/diagnostics
           if [ -f android-openjdk/jdk-build.log ]; then
-            tail -n 400 android-openjdk/jdk-build.log > repo-diagnostics/mobile/diagnostics/jdk-build-failure.log
+            {
+              echo "===== rejeicoes de patch / erros ====="
+              grep -nE "reject|hunks|REJ:|error:" android-openjdk/jdk-build.log | head -60 || true
+              echo "===== ultimas 300 linhas da build ====="
+              tail -n 300 android-openjdk/jdk-build.log
+            } > repo-diagnostics/mobile/diagnostics/jdk-build-failure.log
           else
             echo "jdk-build.log was not created; the failure happened before the build started." > repo-diagnostics/mobile/diagnostics/jdk-build-failure.log
           fi
