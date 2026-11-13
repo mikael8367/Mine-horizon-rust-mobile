@@ -84,7 +84,7 @@ jobs:
           source.write_text(code)
           PY_ANDROID_IFADDRS
           '''
-          fallback = "\\n".join(line[10:] if line.startswith("          ") else line for line in fallback.splitlines()) + "\\n"
+          fallback = chr(10).join(line[10:] if line.startswith("          ") else line for line in fallback.splitlines()) + chr(10)
           if anchor not in text:
               raise SystemExit("Could not find Android patch application command in build_jdk.sh")
           if "PY_ANDROID_IFADDRS" not in text:
