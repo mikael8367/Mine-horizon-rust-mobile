@@ -55,7 +55,8 @@ jobs:
           test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
           {
-            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux
+-x86_64/bin/aarch64-linux-android26-clang"
             echo "CC_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
             echo "AR_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
             echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
@@ -84,7 +85,8 @@ jobs:
           cp crates/horizon-prepare/src/exporters.rs mobile/app/src/main/assets/prepare-root/crates/horizon-prepare/src/exporters.rs
           cp -a mods/horizon/src/test/java/dev/horizonlab/parity mobile/app/src/main/assets/prepare-root/mods/horizon/src/test/java/dev/horizonlab/
 
-      - name: Stage native renderer
+      - name: Stage native render
+er
         shell: bash
         run: |
           set -euo pipefail
@@ -93,7 +95,7 @@ jobs:
           cp target/x86_64-linux-android/release/libhorizon_android.so mobile/app/src/main/jniLibs/x86_64/
           file mobile/app/src/main/jniLibs/arm64-v8a/libhorizon_android.so mobile/app/src/main/jniLibs/x86_64/libhorizon_android.so
           readelf -h mobile/app/src/main/jniLibs/arm64-v8a/libhorizon_android.so | grep -E "Machine:.*AArch64"
-          readelf -h mobile/app/src/main/jniLibs/x86_64/libhorizon_android.so | grep -E "Machine:.*x86-64"
+          readelf -h mobile/app/src/main/jniLibs/x86_64/libhorizon_android.so | grep -iE "Machine:.*x86-64"
 
       - uses: actions/setup-java@v4
         with:
@@ -126,7 +128,8 @@ jobs:
 
       - name: Install Android 12 (API 31) emulator system image
         run: |
-          sdkmanager --install "emulator" "platform-tools" "platforms;android-31" "build-tools;35.0.0" "system-images;android-31;google_apis;x86_64" > /dev/null
+          sdkmanager --install "emulator" "platform-tools" "platforms;android-31" "build-tools;35.0.0" "system-images;android-31;google_apis;x86_64
+" > /dev/null
 
       - name: Create AVD
         run: |
@@ -166,7 +169,8 @@ jobs:
         run: |
           set -uo pipefail
           if ! adb install -r mobile/app/build/outputs/apk/debug/app-debug.apk; then
-            echo "Falha ao instalar o APK no emulador"
+            echo "Falha ao instalar o APK
+ no emulador"
             exit 1
           fi
           adb logcat -c
@@ -202,7 +206,8 @@ jobs:
               cat startup-status.txt
             fi
             if [ -s emulator-crash-buffer.txt ]; then
-              echo "Buffer de crash do logcat não vazio; primeiras ocorrências:"
+              echo "Buffer de crash do logcat não vazio; primeiras 
+ocorrências:"
               grep -nE "FATAL EXCEPTION|Fatal signal|SIGSEGV|SIGABRT|Process: dev.playhorizon" emulator-crash-buffer.txt | head -40 || true
               head -200 emulator-crash-buffer.txt
             fi
@@ -245,6 +250,7 @@ jobs:
           path: |
             mobile/diagnostics/emulator-summary.txt
             mobile/diagnostics/emulator-logcat.txt
-            mobile/app/build/outputs/apk/debug/app-debug.apk
+        
+    mobile/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
           retention-days: 14
