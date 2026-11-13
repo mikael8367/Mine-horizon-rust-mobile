@@ -203,6 +203,7 @@ jobs:
           adb logcat -d -b crash > emulator-crash-buffer.txt || true
           adb logcat -d -t 12000 > emulator-logcat.txt
           adb shell "run-as dev.playhorizon.mobile cat files/horizon-diagnostics/launch-log.txt 2>/dev/null" > launch-log-device.txt || true
+          adb shell "run-as dev.playhorizon.mobile cat files/horizon-diagnostics/crash-log.txt 2>/dev/null" > launcher-crash-log.txt || true
           echo "PID after 30s: $(cat app-pid.txt 2>/dev/null || echo vazio)"
           adb shell dumpsys activity activities | grep -E "dev.playhorizon" | head -10 || true
 
@@ -211,16 +212,18 @@ jobs:
         run: |
           set -uo pipefail
           adb logcat -c
-          adb shell am start -W -n dev.playhorizon.mobile/android.app.NativeActivity || true
-          sleep 30
-          adb shell pidof dev.playhorizon.mobile > engine-pid.txt || true
-          adb logcat -d -b crash > engine-crash-buffer.txt || true
-          adb logcat -d -t 12000 > engine-logcat.txt
-          adb shell "run-as dev.playhorizon.mobile cat files/horizon-startup-status.txt 2>/dev/null" > startup-status.txt || true
+          # NativeActivity is intentionally not exported. A shell-originated
+          # am start is rejected by Android and does not exercise the engine.
+          # Do not misreport that permission denial as an engine crash.
+          echo "SKIPPED: NativeActivity is not exported; engine must be launched by MainActivity." > engine-test-status.txt
+          : > engine-pid.txt
+          : > engine-crash-buffer.txt
+          : > engine-logcat.txt
+          : > startup-status.txt
           adb shell "run-as dev.playhorizon.mobile cat files/horizon-diagnostics/launch-log.txt 2>/dev/null" > engine-launch-log.txt || true
-          echo "PID 30 s após abrir o motor: $(cat engine-pid.txt 2>/dev/null || echo vazio)"
-          echo "Status de inicialização nativa:"
-          cat startup-status.txt 2>/dev/null || echo "(sem arquivo de status)"
+          adb shell "run-as dev.playhorizon.mobile cat files/horizon-diagnostics/crash-log.txt 2>/dev/null" > engine-crash-log.txt || true
+          echo "Teste do motor: iniciado somente pelo próprio app; tentativa externa desativada."
+          cat engine-test-status.txt
 
       - name: Verdict
         shell: bash
@@ -238,10 +241,11 @@ jobs:
             else
               echo "RESULTADO LAUNCHER: FALHA. O processo não estava vivo 30 s após a abertura."
             fi
-            if [ -n "$ENGINE_PID" ]; then
-              echo "RESULTADO MOTOR: o processo continuou vivo (pid $ENGINE_PID) 30 s após abrir a NativeActivity."
-            else
-              echo "RESULTADO MOTOR: FALHA. O processo morreu dentro de 30 s após abrir a NativeActivity."
+            echo "RESULTADO MOTOR: NÃO TESTADO. O componente NativeActivity não é exportado; o shell do emulador não pode iniciá-lo diretamente."
+            cat engine-test-status.txt 2>/dev/null || true
+            if [ -s launcher-crash-log.txt ]; then
+              echo "Crash log privado do launcher:"
+              tail -n 160 launcher-crash-log.txt
             fi
             if [ -s startup-status.txt ]; then
               echo "Status nativo de inicialização:"
@@ -254,10 +258,11 @@ jobs:
             fi
           } > mobile/diagnostics/emulator-summary.txt
           cat mobile/diagnostics/emulator-summary.txt
-          if [ -z "$PID" ] || [ -z "$ENGINE_PID" ]; then
+          if [ -z "$PID" ]; then
+            echo "Launcher não permaneceu ativo; consulte crash-log privado."
             exit 1
           fi
-          if grep -qE "FATAL EXCEPTION|Fatal signal" engine-crash-buffer.txt engine-logcat.txt; then
+          if grep -qE "FATAL EXCEPTION|Fatal signal" engine-crash-buffer.txt engine-logcat.txt launcher-crash-log.txt; then
             echo "Marcador de crash encontrado no logcat mesmo com o processo vivo."
             exit 1
           fi
@@ -276,6 +281,9 @@ jobs:
           cp startup-status.txt mobile/diagnostics/emulator-startup-status.txt 2>/dev/null || true
           cp launch-log-device.txt mobile/diagnostics/emulator-launch-log.txt 2>/dev/null || true
           cp engine-launch-log.txt mobile/diagnostics/engine-launch-log.txt 2>/dev/null || true
+          cp launcher-crash-log.txt mobile/diagnostics/launcher-crash-log.txt 2>/dev/null || true
+          cp engine-crash-log.txt mobile/diagnostics/engine-crash-log.txt 2>/dev/null || true
+          cp engine-test-status.txt mobile/diagnostics/engine-test-status.txt 2>/dev/null || true
           cp app-pid.txt mobile/diagnostics/emulator-app-pid.txt 2>/dev/null || true
           cp engine-pid.txt mobile/diagnostics/engine-app-pid.txt 2>/dev/null || true
           git config user.name "Horizon CI"
@@ -296,6 +304,9 @@ jobs:
           path: |
             mobile/diagnostics/emulator-summary.txt
             mobile/diagnostics/engine-logcat.txt
+            mobile/diagnostics/launcher-crash-log.txt
+            mobile/diagnostics/engine-crash-log.txt
+            mobile/diagnostics/engine-test-status.txt
             mobile/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
           retention-days: 14
