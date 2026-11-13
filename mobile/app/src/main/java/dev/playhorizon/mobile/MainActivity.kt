@@ -54,7 +54,6 @@ class MainActivity : Activity() {
         CrashDiagnostics.stage(this, "launcher_on_create",
             "process=${System.currentTimeMillis()} sdk=${Build.VERSION.SDK_INT} abi=${Build.SUPPORTED_ABIS.firstOrNull()}")
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        enterImmersiveLandscape()
         selectedAccountMode = getSharedPreferences("horizon_launcher", MODE_PRIVATE).getString("account_mode", "offline") ?: "offline"
         buildDownloadScreen()
         CrashDiagnostics.stage(this, "launcher_ui_mounted", "tela de download montada e exibida")
@@ -430,6 +429,10 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
         setContentView(root)
+        // DecorView/WindowInsetsController só existem depois que o conteúdo
+        // foi instalado na janela. Chamar antes do setContentView causa NPE
+        // em Android 12 (PhoneWindow.getInsetsController).
+        enterImmersiveLandscape()
     }
 
     private fun startMinecraftDownload() {
@@ -615,7 +618,9 @@ class MainActivity : Activity() {
     private fun enterImmersiveLandscape() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.setDecorFitsSystemWindows(false)
-            window.insetsController?.let { controller ->
+            // Use o controller do DecorView já anexado, não o getter de
+            // PhoneWindow que pode acessar um DecorView ainda inexistente.
+            window.decorView.windowInsetsController?.let { controller ->
                 controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
                 controller.systemBarsBehavior =
                     WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
