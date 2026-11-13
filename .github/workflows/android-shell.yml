@@ -199,4 +199,4 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-# Android debug APK is built and published as a downloadable Actions artifact.
+# Android debug APK is validated, uploaded as an Actions artifact, and published to a unique GitHub Release.
