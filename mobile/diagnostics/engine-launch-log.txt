@@ -1,0 +1,1 @@
+[2026-11-13 03:17:47.246] launcher_on_create | process=1794539867190 sdk=31 abi=x86_64

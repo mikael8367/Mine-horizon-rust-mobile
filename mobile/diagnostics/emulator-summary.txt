@@ -1,0 +1,5 @@
+Emulador: Android 12 (API 31), x86_64 com KVM, GPU SwiftShader.
+APK: app-debug.apk (arm64-v8a + x86_64), instalado e iniciado com am start.
+Observação: valida ciclo de vida, JNI e boot do motor; a GPU real do Galaxy A12 (PowerVR GE8320) só pode ser validada no aparelho físico.
+RESULTADO LAUNCHER: FALHA. O processo não estava vivo 30 s após a abertura.
+RESULTADO MOTOR: FALHA. O processo morreu dentro de 30 s após abrir a NativeActivity.
