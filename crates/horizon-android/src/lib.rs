@@ -25,6 +25,33 @@ pub fn android_main(app: AndroidApp) {
     };
     write_status("native_entry_started", "NativeActivity chamou android_main.");
 
+    // Android: start from GLES, never from Vulkan. The PowerVR GE8320 (Galaxy A12)
+    // and other older mobile Vulkan drivers kill the whole process inside the
+    // driver while the adapter is created, a native crash no Rust code can catch:
+    // the game window then closes a few milliseconds after it opens. wgpu reads
+    // WGPU_BACKEND in `Backends::with_env` (gfx.rs `instance_descriptor`), so
+    // pinning the variable here keeps every renderer instance on the GL backend
+    // only, without touching the desktop backend order. A plain-text override
+    // file (horizon-wgpu-backend.txt, one backend name such as "vulkan") hands
+    // the advanced choice back to whoever wants to test another backend on
+    // purpose.
+    if std::env::var_os("WGPU_BACKEND").is_none() {
+        let override_path = data_dir.join("horizon-wgpu-backend.txt");
+        let requested = std::fs::read_to_string(&override_path)
+            .map(|value| value.trim().to_owned())
+            .ok()
+            .filter(|value| {
+                !value.is_empty()
+                    && value
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            });
+        let backend = requested.unwrap_or_else(|| "gl".to_owned());
+        // Safe here: android_main runs before the engine spawns its threads, so
+        // no other thread can be reading the environment while it is written.
+        unsafe { std::env::set_var("WGPU_BACKEND", backend) };
+    }
+
     let home = data_dir.join("horizon-home");
     let game_dir = data_dir.join("horizon-game");
     let player_dir = data_dir.join("horizon-player");
