@@ -91,18 +91,32 @@ jobs:
               text = text.replace(anchor, fallback, 1)
               script.write_text(text)
           PY
-          
+
       - name: Build full OpenJDK 25 for Android ARM64
         working-directory: android-openjdk
         shell: bash
         run: |
           set -euo pipefail
-          bash ci_build_arch_aarch64.sh
+          # The upstream build can fail deep inside the JDK's own makefiles; keep
+          # the full output in a file so a failure step can show the real error.
+          bash ci_build_arch_aarch64.sh 2>&1 | tee jdk-build.log
           test -x jdkout/bin/java
           test -x jdkout/bin/javac
           file jdkout/bin/java jdkout/bin/javac
           readelf -h jdkout/bin/java | grep -E 'Machine:.*AArch64'
           readelf -h jdkout/bin/javac | grep -E 'Machine:.*AArch64'
+
+      - name: Show why the upstream JDK build failed
+        if: failure()
+        working-directory: android-openjdk
+        shell: bash
+        run: |
+          if [ -f jdk-build.log ]; then
+            echo "===== last 200 lines of the OpenJDK build log ====="
+            tail -n 200 jdk-build.log
+          else
+            echo "jdk-build.log was not created; the failure happened before the build started."
+          fi
 
       - name: Package JDK and generate integrity manifest
         working-directory: android-openjdk
