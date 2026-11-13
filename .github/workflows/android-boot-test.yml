@@ -11,6 +11,7 @@ on:
       - "crates/horizon-client-lib/**"
       - "crates/horizon-client-input/**"
       - "crates/horizon-client-render/**"
+      - "crates/horizon-prepare/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/android-boot-test.yml"
@@ -27,10 +28,12 @@ concurrency:
 # and SwiftShader. The test APK carries both arm64-v8a (Galaxy A12) and
 # x86_64 (emulator) native libraries so the launcher can really start in CI.
 # It launches the launcher activity exactly as a tap on the app icon does,
-# checks process liveness after 30 s, and records the crash buffer, the full
-# logcat, the native startup status file and the launcher diagnostics, all
-# committed back to mobile/diagnostics/ so failures can be read from the
-# repository without a physical device.
+# checks process liveness after 30 s, then starts the native engine
+# (NativeActivity) exactly as the launcher's "Abrir motor Rust" button does
+# and checks liveness and the native startup status file again. The crash
+# buffer, the full logcat, the native startup status file and the launcher
+# diagnostics are all committed back to mobile/diagnostics/ so failures can
+# be read from the repository without a physical device.
 jobs:
   boot-test:
     runs-on: ubuntu-latest
@@ -55,8 +58,7 @@ jobs:
           test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
           {
-            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux
--x86_64/bin/aarch64-linux-android26-clang"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
             echo "CC_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
             echo "AR_aarch64_linux_android=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
             echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
@@ -85,8 +87,7 @@ jobs:
           cp crates/horizon-prepare/src/exporters.rs mobile/app/src/main/assets/prepare-root/crates/horizon-prepare/src/exporters.rs
           cp -a mods/horizon/src/test/java/dev/horizonlab/parity mobile/app/src/main/assets/prepare-root/mods/horizon/src/test/java/dev/horizonlab/
 
-      - name: Stage native render
-er
+      - name: Stage native renderer libraries
         shell: bash
         run: |
           set -euo pipefail
@@ -128,8 +129,7 @@ er
 
       - name: Install Android 12 (API 31) emulator system image
         run: |
-          sdkmanager --install "emulator" "platform-tools" "platforms;android-31" "build-tools;35.0.0" "system-images;android-31;google_apis;x86_64
-" > /dev/null
+          sdkmanager --install "emulator" "platform-tools" "platforms;android-31" "build-tools;35.0.0" "system-images;android-31;google_apis;x86_64" > /dev/null
 
       - name: Create AVD
         run: |
@@ -169,8 +169,7 @@ er
         run: |
           set -uo pipefail
           if ! adb install -r mobile/app/build/outputs/apk/debug/app-debug.apk; then
-            echo "Falha ao instalar o APK
- no emulador"
+            echo "Falha ao instalar o APK no emulador"
             exit 1
           fi
           adb logcat -c
@@ -179,12 +178,25 @@ er
           adb shell pidof dev.playhorizon.mobile > app-pid.txt || true
           adb logcat -d -b crash > emulator-crash-buffer.txt || true
           adb logcat -d -t 12000 > emulator-logcat.txt
-          adb shell "run-as dev.playhorizon.mobile cat files/horizon-startup-status.txt 2>/dev/null" > startup-status.txt || true
           adb shell "run-as dev.playhorizon.mobile cat files/horizon-diagnostics/launch-log.txt 2>/dev/null" > launch-log-device.txt || true
           echo "PID after 30s: $(cat app-pid.txt 2>/dev/null || echo vazio)"
+          adb shell dumpsys activity activities | grep -E "dev.playhorizon" | head -10 || true
+
+      - name: Launch the native engine (NativeActivity)
+        shell: bash
+        run: |
+          set -uo pipefail
+          adb logcat -c
+          adb shell am start -W -n dev.playhorizon.mobile/android.app.NativeActivity || true
+          sleep 30
+          adb shell pidof dev.playhorizon.mobile > engine-pid.txt || true
+          adb logcat -d -b crash > engine-crash-buffer.txt || true
+          adb logcat -d -t 12000 > engine-logcat.txt
+          adb shell "run-as dev.playhorizon.mobile cat files/horizon-startup-status.txt 2>/dev/null" > startup-status.txt || true
+          adb shell "run-as dev.playhorizon.mobile cat files/horizon-diagnostics/launch-log.txt 2>/dev/null" > engine-launch-log.txt || true
+          echo "PID 30 s após abrir o motor: $(cat engine-pid.txt 2>/dev/null || echo vazio)"
           echo "Status de inicialização nativa:"
           cat startup-status.txt 2>/dev/null || echo "(sem arquivo de status)"
-          adb shell dumpsys activity activities | grep -E "dev.playhorizon" | head -10 || true
 
       - name: Verdict
         shell: bash
@@ -192,31 +204,36 @@ er
           set -uo pipefail
           mkdir -p mobile/diagnostics
           PID="$(tr -d '\r[:space:]' < app-pid.txt 2>/dev/null || true)"
+          ENGINE_PID="$(tr -d '\r[:space:]' < engine-pid.txt 2>/dev/null || true)"
           {
             echo "Emulador: Android 12 (API 31), x86_64 com KVM, GPU SwiftShader."
             echo "APK: app-debug.apk (arm64-v8a + x86_64), instalado e iniciado com am start."
             echo "Observação: valida ciclo de vida, JNI e boot do motor; a GPU real do Galaxy A12 (PowerVR GE8320) só pode ser validada no aparelho físico."
             if [ -n "$PID" ]; then
-              echo "RESULTADO: o launcher permaneceu aberto (pid $PID) 30 s após a abertura."
+              echo "RESULTADO LAUNCHER: permaneceu aberto (pid $PID) 30 s após a abertura."
             else
-              echo "RESULTADO: FALHA. O processo não estava vivo 30 s após a abertura."
+              echo "RESULTADO LAUNCHER: FALHA. O processo não estava vivo 30 s após a abertura."
+            fi
+            if [ -n "$ENGINE_PID" ]; then
+              echo "RESULTADO MOTOR: o processo continuou vivo (pid $ENGINE_PID) 30 s após abrir a NativeActivity."
+            else
+              echo "RESULTADO MOTOR: FALHA. O processo morreu dentro de 30 s após abrir a NativeActivity."
             fi
             if [ -s startup-status.txt ]; then
               echo "Status nativo de inicialização:"
               cat startup-status.txt
             fi
-            if [ -s emulator-crash-buffer.txt ]; then
-              echo "Buffer de crash do logcat não vazio; primeiras 
-ocorrências:"
-              grep -nE "FATAL EXCEPTION|Fatal signal|SIGSEGV|SIGABRT|Process: dev.playhorizon" emulator-crash-buffer.txt | head -40 || true
-              head -200 emulator-crash-buffer.txt
+            if [ -s engine-crash-buffer.txt ]; then
+              echo "Buffer de crash do logcat não vazio; primeiras ocorrências:"
+              grep -nE "FATAL EXCEPTION|Fatal signal|SIGSEGV|SIGABRT|Process: dev.playhorizon" engine-crash-buffer.txt | head -40 || true
+              head -200 engine-crash-buffer.txt
             fi
           } > mobile/diagnostics/emulator-summary.txt
           cat mobile/diagnostics/emulator-summary.txt
-          if [ -z "$PID" ]; then
+          if [ -z "$PID" ] || [ -z "$ENGINE_PID" ]; then
             exit 1
           fi
-          if grep -qE "FATAL EXCEPTION|Fatal signal" emulator-crash-buffer.txt emulator-logcat.txt; then
+          if grep -qE "FATAL EXCEPTION|Fatal signal" engine-crash-buffer.txt engine-logcat.txt; then
             echo "Marcador de crash encontrado no logcat mesmo com o processo vivo."
             exit 1
           fi
@@ -228,16 +245,21 @@ ocorrências:"
           set -uo pipefail
           mkdir -p mobile/diagnostics
           cp emulator-crash-buffer.txt mobile/diagnostics/emulator-crash-buffer.txt 2>/dev/null || true
+          cp engine-crash-buffer.txt mobile/diagnostics/engine-crash-buffer.txt 2>/dev/null || true
           cp emulator-logcat.txt mobile/diagnostics/emulator-logcat.txt 2>/dev/null || true
+          cp engine-logcat.txt mobile/diagnostics/engine-logcat.txt 2>/dev/null || true
           cp emulator-boot.log mobile/diagnostics/emulator-boot.log 2>/dev/null || true
           cp startup-status.txt mobile/diagnostics/emulator-startup-status.txt 2>/dev/null || true
           cp launch-log-device.txt mobile/diagnostics/emulator-launch-log.txt 2>/dev/null || true
+          cp engine-launch-log.txt mobile/diagnostics/engine-launch-log.txt 2>/dev/null || true
           cp app-pid.txt mobile/diagnostics/emulator-app-pid.txt 2>/dev/null || true
+          cp engine-pid.txt mobile/diagnostics/engine-app-pid.txt 2>/dev/null || true
           git config user.name "Horizon CI"
           git config user.email "actions@users.noreply.github.com"
           git add mobile/diagnostics
           if git commit -m "Record Android 12 emulator boot diagnostics [skip ci]"; then
-            git push origin HEAD:mobile/android-port
+            git pull --rebase origin mobile/android-port || true
+            git push origin HEAD:mobile/android-port || echo "Falha ao publicar os diagnósticos (conflito de push)."
           else
             echo "Nada novo para registrar."
           fi
@@ -249,8 +271,7 @@ ocorrências:"
           name: horizon-boot-test-api31
           path: |
             mobile/diagnostics/emulator-summary.txt
-            mobile/diagnostics/emulator-logcat.txt
-        
-    mobile/app/build/outputs/apk/debug/app-debug.apk
+            mobile/diagnostics/engine-logcat.txt
+            mobile/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
           retention-days: 14
