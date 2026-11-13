@@ -12,9 +12,19 @@ android {
     defaultConfig {
         applicationId = "dev.playhorizon.mobile"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // 28, não 35: no Android 10+ (SELinux, domínio untrusted_app), um app com
+        // targetSdk >= 29 não pode executar com exec() nenhum arquivo dentro da
+        // própria pasta de dados (Behavior changes: apps targeting Android 10,
+        // "Exec restrictions"). O pipeline "Baixar e preparar recursos vanilla"
+        // executa, via ProcessBuilder, o OpenJDK 25 ARM64 e o horizon-prepare
+        // instalados em filesDir; com targetSdk 29+ ambos morrem com
+        // "Permission denied" em qualquer aparelho sem root. Com targetSdk 28
+        // (domínio untrusted_app_27) a execução é permitida, como no Termux.
+        // O app só usa armazenamento privado, então nada do que ele precisa é
+        // perdido com o targetSdk menor.
+        targetSdk = 28
+        versionCode = 2
+        versionName = "0.1.1"
 
         // This port currently ships only the Rust engine built for Android ARM64.
         ndk {
