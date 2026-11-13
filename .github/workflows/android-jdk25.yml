@@ -118,6 +118,31 @@ jobs:
             echo "jdk-build.log was not created; the failure happened before the build started."
           fi
 
+      - name: Publish JDK build failure diagnostics to the branch
+        if: failure()
+        uses: actions/checkout@v4
+        with:
+          ref: mobile/android-port
+          path: repo-diagnostics
+
+      - name: Commit JDK build failure log
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p repo-diagnostics/mobile/diagnostics
+          if [ -f android-openjdk/jdk-build.log ]; then
+            tail -n 400 android-openjdk/jdk-build.log > repo-diagnostics/mobile/diagnostics/jdk-build-failure.log
+          else
+            echo "jdk-build.log was not created; the failure happened before the build started." > repo-diagnostics/mobile/diagnostics/jdk-build-failure.log
+          fi
+          cd repo-diagnostics
+          git config user.name "horizon-diagnostics-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add mobile/diagnostics/jdk-build-failure.log
+          git commit -m "diagnostics: registrar falha da build do OpenJDK 25 ARM64 [skip ci]" || echo "nothing to commit"
+          git push origin HEAD:mobile/android-port
+
       - name: Package JDK and generate integrity manifest
         working-directory: android-openjdk
         shell: bash
