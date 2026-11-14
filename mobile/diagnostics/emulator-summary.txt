@@ -1,6 +1,6 @@
 Emulador: Android 12 (API 31), x86_64 com KVM, GPU SwiftShader.
 APK: app-debug.apk (arm64-v8a + x86_64), instalado e iniciado com am start.
 Observação: valida ciclo de vida, JNI e boot do motor; a GPU real do Galaxy A12 (PowerVR GE8320) só pode ser validada no aparelho físico.
-RESULTADO LAUNCHER: permaneceu aberto (pid 2837) 30 s após a abertura.
+RESULTADO LAUNCHER: permaneceu aberto (pid 2858) 30 s após a abertura.
 RESULTADO MOTOR: NÃO TESTADO. O componente NativeActivity não é exportado; o shell do emulador não pode iniciá-lo diretamente.
 SKIPPED: NativeActivity is not exported; engine must be launched by MainActivity.
