@@ -152,6 +152,58 @@ jobs:
           readelf -h jdkout/bin/java | grep -E 'Machine:.*AArch64'
           readelf -h jdkout/bin/javac | grep -E 'Machine:.*AArch64'
 
+      - name: Verify javac launcher integrity before packaging
+        working-directory: android-openjdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A real javac launcher is compiled with -DJAVA_ARGS='{... "-m",
+          # "jdk.compiler/com.sun.tools.javac.Main" ...}', so the class name is
+          # embedded in the binary and '-version' is forwarded to the compiler
+          # instead of being consumed by the java option parser. A javac that is
+          # a symlink to java (zip stores the target's content) or a copy of the
+          # java launcher answers 'javac -version' with the JAVA banner and exit
+          # code 0, which is exactly the failure users saw on device. Fail here,
+          # before the release is updated, and keep the evidence in the log.
+          {
+            echo "== ls -la jdkout/bin/java jdkout/bin/javac =="
+            ls -la jdkout/bin/java jdkout/bin/javac
+            if [ -L jdkout/bin/javac ]; then
+              echo "FALHA: jdkout/bin/javac e um link simbolico para $(readlink jdkout/bin/javac)."
+              echo "O empacotamento com zip (sem -y) guardaria o conteudo do java como javac,"
+              echo "e o app receberia um 'javac' que se comporta como o launcher do java."
+              exit 1
+            fi
+            if cmp -s jdkout/bin/java jdkout/bin/javac; then
+              echo "FALHA: jdkout/bin/javac e uma copia byte a byte de jdkout/bin/java."
+              exit 1
+            fi
+            if ! strings jdkout/bin/javac | grep -aq 'jdk.compiler/com.sun.tools.javac.Main'; then
+              echo "FALHA: jdkout/bin/javac nao embute a classe principal do compilador"
+              echo "(jdk.compiler/com.sun.tools.javac.Main). Sem esse JAVA_ARGS compilado no"
+              echo "launcher, '-version' e tratado como opcao do java e o binario imprime o"
+              echo "banner do java em vez de 'javac 25.x'. Amostra de strings do binario:"
+              strings jdkout/bin/javac | grep -aE 'version|Main|javac' | head -20 || true
+              exit 1
+            fi
+            if strings jdkout/bin/java | grep -aq 'jdk.compiler/com.sun.tools.javac.Main'; then
+              echo "FALHA inesperada: jdkout/bin/java embute a classe principal do javac."
+              exit 1
+            fi
+            test -s jdkout/jmods/jdk.compiler.jmod || { echo "FALHA: jdkout/jmods/jdk.compiler.jmod ausente."; exit 1; }
+            JIMAGE="openjdk/build/linux-aarch64-server-release/buildjdk/jdk/bin/jimage"
+            if [ -x "$JIMAGE" ]; then
+              "$JIMAGE" list jdkout/lib/modules | grep -m1 '^jdk.compiler/' >/dev/null || {
+                echo "FALHA: o modulo jdk.compiler nao esta em jdkout/lib/modules."
+                exit 1
+              }
+              echo "OK: modulo jdk.compiler presente em lib/modules."
+            else
+              echo "AVISO: jimage do build nao encontrado em $JIMAGE; checagem de lib/modules pulada."
+            fi
+            echo "OK: bin/javac e um launcher proprio do compilador (classe embutida; nao e copia nem symlink do java)."
+          } 2>&1 | tee jdk-launcher-check.log
+
       - name: Verify jsound was disabled in the JDK configuration
         if: always()
         working-directory: android-openjdk
@@ -174,6 +226,10 @@ jobs:
             tail -n 200 jdk-build.log
           else
             echo "jdk-build.log was not created; the failure happened before the build started."
+          fi
+          if [ -f jdk-launcher-check.log ]; then
+            echo "===== javac launcher integrity check output ====="
+            cat jdk-launcher-check.log
           fi
 
       - name: Publish JDK build failure diagnostics to the branch
@@ -198,6 +254,13 @@ jobs:
             } > repo-diagnostics/mobile/diagnostics/jdk-build-failure.log
           else
             echo "jdk-build.log was not created; the failure happened before the build started." > repo-diagnostics/mobile/diagnostics/jdk-build-failure.log
+          fi
+          if [ -f android-openjdk/jdk-launcher-check.log ]; then
+            {
+              echo ""
+              echo "===== verificacao de integridade do launcher javac ====="
+              cat android-openjdk/jdk-launcher-check.log
+            } >> repo-diagnostics/mobile/diagnostics/jdk-build-failure.log
           fi
           cd repo-diagnostics
           git config user.name "horizon-diagnostics-bot"
