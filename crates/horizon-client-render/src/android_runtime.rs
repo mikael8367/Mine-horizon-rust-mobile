@@ -72,8 +72,7 @@ pub fn note_input(kind: InputMode) -> bool {
 /// A raw event of the controller with Android device id `id`: motion axes
 /// and buttons by Android code. Returns whether the event was a controller's
 /// (the caller then keeps it from other handlers); a meaningful one also
-/// notes the controller as used. A removed device forgets every controller,
-/// the platform then lists those still there ([`retain_gamepads`]).
+/// notes the controller as used. A removed device forgets only that controller.
 pub fn gamepad_event(id: i32, event: &DeviceEvent) -> bool {
     let activity = {
         let mut devices = lock(&GAMEPADS);
@@ -83,7 +82,7 @@ pub fn gamepad_event(id: i32, event: &DeviceEvent) -> bool {
                 devices.key(id, button, state == ElementState::Pressed)
             }
             DeviceEvent::Removed => {
-                devices.clear();
+                devices.remove(id);
                 false
             }
             _ => return false,
