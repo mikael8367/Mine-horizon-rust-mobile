@@ -90,7 +90,7 @@ fn held_trigger_and_pending_press_do_not_add_together() {
     assert_eq!(d.poll().triggers[0], 0.0);
     d.axis(1, 17, 0.6);
     d.axis(1, 17, 0.0);
-    assert_eq!(d.poll().triggers[0], 0.f32.max(0.6));
+    assert_eq!(d.poll().triggers[0], 0.6);
     assert_eq!(d.poll().triggers[0], 0.0);
 }
 #[test]
@@ -172,3 +172,41 @@ fn input_modes_save_by_name() {
     );
     assert!(InputMode::ALL.iter().all(|m| !m.label().is_empty()));
 }
+
+#[test]
+fn shared_button_codes_release_only_after_the_last_key() {
+    for (first, second) in [(4, 97), (97, 4)] {
+        let mut d = Devices::default();
+        let mut edges = crate::gamepad::Edges::default();
+        assert!(d.key(1, first, true));
+        assert_eq!(edges.update(&d.poll(), 0.4), [(Button::East, true)]);
+        assert!(!d.key(1, second, true));
+        assert!(!d.key(1, first, true));
+        assert!(edges.update(&d.poll(), 0.4).is_empty());
+        assert!(!d.key(1, first, false));
+        assert!(!d.key(1, first, false));
+        assert!(d.state().held(Button::East));
+        assert!(edges.update(&d.poll(), 0.4).is_empty());
+        assert!(!d.key(1, second, false));
+        assert_eq!(edges.update(&d.poll(), 0.4), [(Button::East, false)]);
+        assert!(d.key(1, second, true));
+    }
+}
+
+#[test]
+fn shared_codes_keep_short_press_and_reset_per_device() {
+    let mut d = Devices::default();
+    assert!(d.key(1, 4, true));
+    assert!(!d.key(1, 97, true));
+    assert!(!d.key(1, 4, false));
+    assert!(!d.key(1, 97, false));
+    assert!(d.poll().held(Button::East));
+    assert!(!d.poll().held(Button::East));
+    assert!(d.key(1, 4, true));
+    assert!(d.key(2, 97, true));
+    d.remove(1);
+    assert!(d.state().held(Button::East));
+    d.clear();
+    assert!(d.key(1, 4, true));
+}
+
