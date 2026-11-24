@@ -11,11 +11,11 @@ A prova também inclui diretamente o arquivo original `launcher/scenery/src/art.
 - Backend [`holool/gpui_android` fixado em `7f1bc62e6103c5bc02fc4757921d3f5cd132fc5a`](https://github.com/holool/gpui_android/tree/7f1bc62e6103c5bc02fc4757921d3f5cd132fc5a).
 - GPUI [`holool/gpui-fast` fixado em `c1d2067ce521826a138f7d9d4fe94299b83ff267`](https://github.com/holool/gpui-fast/tree/c1d2067ce521826a138f7d9d4fe94299b83ff267), o mesmo declarado pelo backend. A view usa chamadas do [exemplo upstream](https://github.com/holool/gpui_android/blob/7f1bc62e6103c5bc02fc4757921d3f5cd132fc5a/examples/minimal/src/lib.rs), e a abertura e macro seguem as [instruções de incorporação](https://github.com/holool/gpui_android/blob/7f1bc62e6103c5bc02fc4757921d3f5cd132fc5a/README.md#embed-a-rust-gpui-application).
 - Backend inicial/experimental, com uma Activity e janela por aplicação; não é garantia de suporte para menus, janelas auxiliares, entradas, recursos, gráficos ou bibliotecas do launcher original. Mesmo que esta biblioteca compile, nada disso estará demonstrado.
-- Sem `Cargo.lock` validado: as revisões Git diretas estão fixadas, mas dependências transitivas podem mudar. Não alegamos build reproduzível nem compilação Android concluída.
+- Sem `Cargo.lock` validado: as revisões Git diretas estão fixadas, mas dependências transitivas podem mudar. A verificação Android descrita abaixo passou, mas o build não é reproduzível e a linkedição ainda não foi validada.
 
 ## Validação sem APK
 
-Esta pasta foi preparada sem ferramentas Rust ou NDK disponíveis no ambiente de criação; portanto a compilação e a execução **não foram testadas**. Os comandos seguintes são para um ambiente de desenvolvimento com rede e espaço suficientes, não foram executados aqui. Os requisitos usados no exemplo upstream incluem Rust 1.99.0, alvo `aarch64-linux-android`, NDK 27.1.12297006, API Android 30 e o LLVM do NDK correspondente ao computador. Defina `ANDROID_NDK_HOME` e `NDK_HOST` (por exemplo, `linux-x86_64`) de acordo com a instalação:
+Em 24/11/2026, em ambiente remoto temporário, `cargo +1.99.0 check --lib --target aarch64-linux-android` concluiu para a biblioteca da prova usando Rust 1.99.0 e NDK 27.1.12297006. Isso não valida a linkedição, a execução, o launcher completo nem o jogo. Sem Cargo.lock validado, resultados futuros podem variar. Os requisitos usados no exemplo upstream incluem Rust 1.99.0, alvo `aarch64-linux-android`, NDK 27.1.12297006, API Android 30 e o LLVM do NDK correspondente ao computador. Defina `ANDROID_NDK_HOME` e `NDK_HOST` (por exemplo, `linux-x86_64`) de acordo com a instalação:
 
 ```sh
 cd android/prova-gpui
