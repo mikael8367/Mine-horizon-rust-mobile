@@ -1,0 +1,69 @@
+name: APK de teste GPUI (não é o launcher)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - integracao-android-controles
+    paths:
+      - android/prova-gpui/EXECUTAR-CI.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prova-gpui-android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk-prova:
+    if: github.repository == 'mikael8367/Mine-horizon-rust-mobile' && github.ref == 'refs/heads/integracao-android-controles' && github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Obter código da branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Instalar ferramentas Android e Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${JAVA_HOME_17_X64:-}"
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          test -n "${ANDROID_HOME:-}"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> "$GITHUB_ENV"
+          rustup toolchain install 1.99.0 --profile minimal --target aarch64-linux-android
+      - name: Instalar Gradle verificado
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/gradle.zip" https://services.gradle.org/distributions/gradle-8.14.3-bin.zip
+          echo 'bd71102213493060956ec229d946beee57158dbd89d0e62b91bca0fa2c5f3531  '"$RUNNER_TEMP/gradle.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "GRADLE_CMD=$RUNNER_TEMP/gradle-8.14.3/bin/gradle" >> "$GITHUB_ENV"
+      - name: Testar verificadores e montar APK de prova
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s android/prova-gpui/tests -v
+          bash android/prova-gpui/build-apk-ci.sh
+      - name: Guardar APK de teste e lock da execução
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: PROVA-GPUI-ANDROID-NAO-E-LAUNCHER-arm64
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            android/prova-gpui/host-android/app/build/outputs/apk/debug/app-debug.apk
+            android/prova-gpui/host-android/app/build/outputs/apk/debug/SHA256SUMS.txt
+            android/prova-gpui/Cargo.lock
