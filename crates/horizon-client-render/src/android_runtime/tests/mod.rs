@@ -116,6 +116,24 @@ fn removed_and_disconnected_controllers_are_forgotten() {
 }
 
 #[test]
+fn removing_another_pad_keeps_active_pad_and_its_pending_hat_tap() {
+    let _serial = serial();
+    button(1, true);
+    button(2, true);
+    gamepad_event(2, &DeviceEvent::Motion { axis: 15, value: -1.0 });
+    gamepad_event(2, &DeviceEvent::Motion { axis: 15, value: 0.0 });
+    assert!(gamepad_event(1, &DeviceEvent::Removed));
+    assert_eq!(active_gamepad_id(), Some(2));
+    let state = gamepad_state();
+    assert!(state.held(Button::South));
+    assert!(state.held(Button::DPadLeft));
+    assert!(!gamepad_state().held(Button::DPadLeft));
+    assert!(gamepad_event(2, &DeviceEvent::Removed));
+    assert_eq!(active_gamepad_id(), None);
+    assert_eq!(gamepad_state(), PadState::default());
+}
+
+#[test]
 fn the_keypad_profile_takes_only_its_keys_and_only_while_on() {
     let _serial = serial();
     assert!(!keypad_key(KeyCode::ArrowUp, true));
