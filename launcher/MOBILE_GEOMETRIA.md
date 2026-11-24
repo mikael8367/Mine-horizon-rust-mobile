@@ -1,0 +1,12 @@
+# Preparação de geometria móvel para o launcher original
+
+`src/mobile_geometry.rs` contém duas peças puras, ainda **não conectadas** à interface ou aos eventos. Não muda o launcher desktop nem cria outra UI. Sem essa integração, elas não corrigem o uso do launcher no celular.
+
+- `fit_popup`: limita a posição e o tamanho de um menu à área útil informada e sinaliza se o conteúdo requer rolagem vertical ou ajuste horizontal. Exemplo futuro: `src/frame.rs`, `row_menu` usa atualmente um limite vertical de 330 px e não limita a altura ao viewport. O chamador deve obter o tamanho real do menu, desenhar o menu existente em uma área rolável quando indicado e fornecer área já descontada de insets e teclado.
+- `touch_bounds`: calcula um alvo maior do que o desenho do controle, limitado a uma faixa exclusiva e à área útil. Exemplo futuro: `src/nav_strip.rs` desenha botões de 32 px; a área de toque pode crescer sem alterar o desenho. Uma faixa exclusiva por controle é obrigatória; a função não resolve sobreposições nem distingue toque de arrasto. A passagem do resultado ao mecanismo de eventos GPUI e o tratamento de gesto devem ser verificados com o backend Android; não se deve gerar um segundo fluxo de eventos sintéticos.
+
+As medidas são em pixels lógicos; o alvo mínimo é configurável e só é alcançado se houver espaço. Funções rejeitam medidas inválidas; o chamador deve tratar `None`. A altura efetiva de menu, insets, teclado e gesto não são fornecidos por este módulo. Ele não implementa entrada Android, IME, acessibilidade ou scroll.
+
+O launcher usa `gpui-fast` 0.1.15 e `gpui-fast-platform`; o backend da prova usa outro fork/revisão do GPUI. Existem tipos/API distintos e o backend Android experimental suporta uma única janela. É necessário harmonizar dependências e adaptar inicialização, recursos e chamadas de janelas antes de integrar e testar a UI real. Não alterar `android/prova-gpui` para usar este módulo sem uma integração fundamentada.
+
+Teste isolado, quando houver Rust instalado: `rustc --edition=2021 --test launcher/src/mobile_geometry.rs -o /tmp/mobile_geometry_tests && /tmp/mobile_geometry_tests`. Em 24/11/2026, os 12 testes passaram em debug e release no Rust Playground (compilação e testes do arquivo isolado, não do launcher). Um teste temporário adicional executou 100.000 casos de geometria em cada modo após o ajuste defensivo; ele não comprova integração nem comportamento em dispositivo. Não houve APK, compilação do launcher, teste Android ou teste de desktop completo.
