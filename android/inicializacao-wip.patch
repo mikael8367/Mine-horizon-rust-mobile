@@ -1,0 +1,235 @@
+diff --git a/crates/horizon-client/src/entry.rs b/crates/horizon-client/src/entry.rs
+index 82c1833..44a737b 100644
+--- a/crates/horizon-client/src/entry.rs
++++ b/crates/horizon-client/src/entry.rs
+@@ -9,6 +9,7 @@ pub struct Startup {
+     launch: LaunchArguments,
+     options: game::Options,
+     _capture: Option<horizon_mod_package::output::Capture>,
++    event_loop_source: game::EventLoopSource,
+ }
+ 
+ impl Startup {
+@@ -16,6 +17,16 @@ impl Startup {
+     pub fn launch(&self) -> &LaunchArguments {
+         &self.launch
+     }
++
++    /// Attach the app handed to a future NativeActivity entry point. This does
++    /// not enable Android rendering: the lifecycle/launch work is still required.
++    /// `prepare` still uses desktop process arguments, so an Android-specific
++    /// startup constructor must be provided before an entry point calls it.
++    #[cfg(target_os = "android")]
++    pub fn with_android_app(mut self, app: winit::platform::android::activity::AndroidApp) -> Self {
++        self.event_loop_source = game::EventLoopSource::with_android_app(app);
++        self
++    }
+ }
+ 
+ /// Holder mode runs first. The game's sole Options validation reads arguments/environment
+@@ -46,6 +57,7 @@ pub fn prepare() -> Startup {
+         launch,
+         options,
+         _capture: capture,
++        event_loop_source: game::EventLoopSource::new(),
+     }
+ }
+ 
+@@ -100,6 +112,12 @@ pub fn start<G>(
+     code: CodeRuntime,
+     startup: Startup,
+ ) {
++    // NativeActivity must not enter the desktop startup's process-exit paths or
++    // create a surface before Android launch and suspension are implemented.
++    if cfg!(target_os = "android") {
++        eprintln!("Horizon: Android startup is not ready (launch configuration and lifecycle are missing)");
++        return;
++    }
+     // The startup spans count from here, before the allocator, hooks and languages are set up.
+     let started = std::time::Instant::now();
+     let _ = CODE_RUNTIME.set(code);
+@@ -107,6 +125,7 @@ pub fn start<G>(
+         launch,
+         options,
+         _capture,
++        event_loop_source,
+     } = startup;
+     runtime_environment::capture(&launch);
+     horizon_threads::configure_allocator();
+@@ -231,7 +250,7 @@ pub fn start<G>(
+     }
+     install_client_hooks();
+     raise_open_file_limit();
+-    if let Err(error) = game::run_with(options, native) {
++    if let Err(error) = game::run_with(options, native, event_loop_source) {
+         // A bad command line is the caller's mistake, not a crash: no report.
+         let missing_mods = game::dedicated::is_missing_mods_refusal(error.as_ref());
+         let usage = error.is::<game::UsageError>() || missing_mods;
+diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.rs
+index 0e86d57..52545fb 100644
+--- a/crates/horizon-client/src/game.rs
++++ b/crates/horizon-client/src/game.rs
+@@ -11725,10 +11725,60 @@ fn hwnd(window: &Window) -> Option<isize> {
+ 
+ pub use launch_api::{UsageError, exit_code};
+ 
++/// Owns the platform input needed to create this run's one winit event loop.
++/// The Android entry point must supply the app received from android-activity.
++pub(crate) struct EventLoopSource {
++    #[cfg(target_os = "android")]
++    android_app: Option<winit::platform::android::activity::AndroidApp>,
++}
++
++impl EventLoopSource {
++    pub(crate) fn new() -> Self {
++        Self {
++            #[cfg(target_os = "android")]
++            android_app: None,
++        }
++    }
++
++    #[cfg(target_os = "android")]
++    pub(crate) fn with_android_app(app: winit::platform::android::activity::AndroidApp) -> Self {
++        Self {
++            android_app: Some(app),
++        }
++    }
++
++    /// Consuming the source prevents a second event loop for the same run.
++    fn build(self) -> Result<EventLoop<()>> {
++        #[cfg(target_os = "android")]
++        {
++            use winit::platform::android::EventLoopBuilderExtAndroid;
++            let app = self
++                .android_app
++                .ok_or("AndroidApp was not supplied by the Android entry point")?;
++            let mut builder = EventLoop::builder();
++            builder.with_android_app(app);
++            Ok(builder.build()?)
++        }
++        #[cfg(not(target_os = "android"))]
++        {
++            Ok(EventLoop::new()?)
++        }
++    }
++}
++
+ pub(crate) fn run_with(
+     options: Options,
+     native: horizon_mod_package::runtime::Runtime,
++    event_loop_source: EventLoopSource,
+ ) -> Result<()> {
++    // The current handlers do not release their wgpu surfaces on Android suspension.
++    // Do not open a window until those lifetimes and Android launch arguments are handled.
++    if cfg!(target_os = "android") {
++        return Err(
++            "Android startup is not ready: lifecycle and launch configuration are not implemented"
++                .into(),
++        );
++    }
+     let mut options = Options::read(options)?;
+     options.mods.native = Arc::new(native);
+     if options.execution_role == execution_role::ExecutionRole::DedicatedServer
+@@ -11782,7 +11832,7 @@ pub(crate) fn run_with(
+         if !options.offscreen && !synchronous_startup(&options) {
+             log::error!("Horizon: {error}");
+             let settings = Settings::load(&Game::options_path());
+-            return no_resources::show(&vanilla_root, &settings);
++            return no_resources::show(&vanilla_root, &settings, event_loop_source);
+         }
+         return Err(error.into());
+     }
+@@ -11897,7 +11947,14 @@ pub(crate) fn run_with(
+     // shared resources.
+     Behaviours::set_cache_dir(std::env::current_dir()?.join(".horizon-cache"));
+     if !synchronous_startup(&options) {
+-        return run_loading(options, early_settings, vanilla_root, None, started);
++        return run_loading(
++            options,
++            early_settings,
++            vanilla_root,
++            None,
++            started,
++            event_loop_source,
++        );
+     }
+     let mut pack_error = None;
+     let selected_root = packs::startup_root(
+@@ -11955,7 +12012,7 @@ pub(crate) fn run_with(
+             );
+             game.settings.save(&Game::options_path());
+         }
+-        run_event_loop(game)?;
++        run_event_loop(game, event_loop_source)?;
+     }
+     Ok(())
+ }
+diff --git a/crates/horizon-client/src/game/runtime/loading_screen.rs b/crates/horizon-client/src/game/runtime/loading_screen.rs
+index bcec2e3..e475d61 100644
+--- a/crates/horizon-client/src/game/runtime/loading_screen.rs
++++ b/crates/horizon-client/src/game/runtime/loading_screen.rs
+@@ -19,7 +19,7 @@ pub(super) fn leave_fullscreen_after(
+     }
+ }
+ 
+-pub(super) fn run_event_loop(mut game: Game<'_>) -> Result<()> {
++pub(super) fn run_event_loop(mut game: Game<'_>, event_loop_source: EventLoopSource) -> Result<()> {
+     if game.options.headless {
+         // No display to open winit's loop on: the game's own loop.
+         game.run_headless();
+@@ -33,7 +33,7 @@ pub(super) fn run_event_loop(mut game: Game<'_>) -> Result<()> {
+         return result;
+     }
+     let mut split = split::Split::new(game);
+-    let result = EventLoop::new()?.run_app(&mut split);
++    let result = event_loop_source.build()?.run_app(&mut split);
+     game = split.host;
+     narrator::stop();
+     leave_fullscreen_after(&result, &mut game.settings);
+diff --git a/crates/horizon-client/src/game/runtime/no_resources.rs b/crates/horizon-client/src/game/runtime/no_resources.rs
+index dfb8aa9..fe41408 100644
+--- a/crates/horizon-client/src/game/runtime/no_resources.rs
++++ b/crates/horizon-client/src/game/runtime/no_resources.rs
+@@ -19,7 +19,11 @@ struct Missing {
+ }
+ 
+ /// Shows the screen until the player closes it.
+-pub(super) fn show(looked_in: &std::path::Path, settings: &Settings) -> Result<()> {
++pub(super) fn show(
++    looked_in: &std::path::Path,
++    settings: &Settings,
++    event_loop_source: EventLoopSource,
++) -> Result<()> {
+     // The player's language, from the strings compiled in: there are no prepared ones.
+     horizon_client::lang::set(horizon_client::lang::Language::load(
+         &[],
+@@ -42,7 +46,7 @@ pub(super) fn show(looked_in: &std::path::Path, settings: &Settings) -> Result<(
+         error: None,
+     };
+ 
+-    EventLoop::new()?.run_app(&mut app)?;
++    event_loop_source.build()?.run_app(&mut app)?;
+     app.error.map_or(Ok(()), Err)
+ }
+ 
+diff --git a/crates/horizon-client/src/game/runtime/resource_loader.rs b/crates/horizon-client/src/game/runtime/resource_loader.rs
+index 5c04989..40e65e5 100644
+--- a/crates/horizon-client/src/game/runtime/resource_loader.rs
++++ b/crates/horizon-client/src/game/runtime/resource_loader.rs
+@@ -264,6 +264,7 @@ pub(super) fn run_loading(
+     vanilla_root: PathBuf,
+     pack_error: Option<String>,
+     started: Instant,
++    event_loop_source: EventLoopSource,
+ ) -> Result<()> {
+     let progress = Progress::new();
+     let (receiver, loader) = startup_menu::spawn_loader(
+@@ -300,7 +301,7 @@ pub(super) fn run_loading(
+         error: None,
+     };
+     let mut app = App::Loading(Box::new(loading));
+-    let result = EventLoop::new()?.run_app(&mut app);
++    let result = event_loop_source.build()?.run_app(&mut app);
+     narrator::stop();
+     match &mut app {
+         // Ready: splitscreen around P1's game.
