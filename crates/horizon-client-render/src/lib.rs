@@ -3,6 +3,8 @@
 #![forbid(unsafe_code)]
 pub mod android_gamepad;
 pub mod android_runtime;
+/// Controle experimental de estados; ainda não integrado ao renderer Android.
+pub mod android_surface_lifecycle;
 pub mod assets;
 pub mod atlas_sources;
 pub mod audio;
