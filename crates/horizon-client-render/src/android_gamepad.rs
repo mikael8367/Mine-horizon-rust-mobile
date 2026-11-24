@@ -10,7 +10,7 @@
 //! Pure logic: the Android event backend feeds it, nothing here talks to the OS.
 use crate::gamepad::{Button, PadState};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The input device the player picked in the options, or the one in use.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,6 +83,8 @@ pub fn button(code: u32) -> Option<Button> {
 #[derive(Default)]
 struct Device {
     keys: PadState,
+    // Distinct Android codes can map to the same logical button.
+    held_codes: BTreeSet<u32>,
     axes: [f32; AXES],
     pending: PadState,
 }
@@ -191,8 +193,15 @@ impl Devices {
     pub fn key(&mut self, id: i32, code: u32, down: bool) -> bool {
         let Some(b) = button(code) else { return false };
         let d = self.devices.entry(id).or_default();
-        let activity = down && !d.keys.held(b);
-        d.keys.set(b, down);
+        let was_held = d.keys.held(b);
+        if down {
+            d.held_codes.insert(code);
+        } else {
+            d.held_codes.remove(&code);
+        }
+        let held = d.held_codes.iter().any(|&held_code| button(held_code) == Some(b));
+        d.keys.set(b, held);
+        let activity = held && !was_held;
         if activity {
             d.pending.set(b, true);
             match b {
