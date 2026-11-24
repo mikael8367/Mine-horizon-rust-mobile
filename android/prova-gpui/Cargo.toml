@@ -1,0 +1,19 @@
+[package]
+name = "horizon-gpui-android-prova"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.0"
+publish = false
+
+[lib]
+name = "horizon_gpui_prova"
+crate-type = ["cdylib"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Igual à dependência do módulo original de arte do launcher.
+image = { version = "0.25", default-features = false }
+gpui_android = { git = "https://github.com/holool/gpui_android", rev = "7f1bc62e6103c5bc02fc4757921d3f5cd132fc5a" }
+gpui = { git = "https://github.com/holool/gpui-fast", rev = "c1d2067ce521826a138f7d9d4fe94299b83ff267", default-features = false }
+
+[workspace]
+resolver = "2"
