@@ -152,6 +152,24 @@ impl Devices {
         };
         let d = self.devices.entry(id).or_default();
         let old = std::mem::replace(&mut d.axes[index], value);
+        // Latch hat direction entries, including a direct change of direction,
+        // so a tap released before the next poll is not lost.
+        let hat_buttons = match index {
+            AXIS_HAT_X => Some((Button::DPadLeft, Button::DPadRight)),
+            AXIS_HAT_Y => Some((Button::DPadUp, Button::DPadDown)),
+            _ => None,
+        };
+        let mut hat_press = false;
+        if let Some((negative, positive)) = hat_buttons {
+            if old >= -0.5 && value < -0.5 {
+                d.pending.set(negative, true);
+                hat_press = true;
+            }
+            if old <= 0.5 && value > 0.5 {
+                d.pending.set(positive, true);
+                hat_press = true;
+            }
+        }
         if value >= 0.5 && old < 0.5 {
             let trigger = match index {
                 AXIS_LTRIGGER | AXIS_BRAKE => Some(0),
@@ -162,7 +180,7 @@ impl Devices {
                 d.pending.triggers[i] = value;
             }
         }
-        let activity = value.abs() > 0.25 && (value - old).abs() > 0.01;
+        let activity = hat_press || (value.abs() > 0.25 && (value - old).abs() > 0.01);
         if activity {
             self.active = Some(id);
         }
@@ -185,6 +203,13 @@ impl Devices {
             self.active = Some(id);
         }
         activity
+    }
+    /// Forget one disconnected controller without disturbing the others.
+    pub fn remove(&mut self, id: i32) {
+        self.devices.remove(&id);
+        if self.active == Some(id) {
+            self.active = None;
+        }
     }
     /// Forget controllers that are no longer connected.
     pub fn retain(&mut self, ids: &[i32]) {
@@ -211,7 +236,17 @@ impl Devices {
     pub fn poll(&mut self) -> PadState {
         self.active
             .and_then(|id| self.devices.get_mut(&id))
-            .map(|d| d.state().merge(&std::mem::take(&mut d.pending)))
+            .map(|d| {
+                let state = d.state();
+                let pending = std::mem::take(&mut d.pending);
+                let mut result = state.merge(&pending);
+                // Pending input belongs to the same pad, not a second source.
+                // Adding trigger values here would falsely amplify a held trigger.
+                for i in 0..2 {
+                    result.triggers[i] = state.triggers[i].max(pending.triggers[i]);
+                }
+                result
+            })
             .unwrap_or_default()
     }
 }
@@ -266,113 +301,4 @@ impl Selection {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn android_y_is_inverted_and_hats_do_not_erase_key_dpad() {
-        let mut d = Devices::default();
-        d.axis(7, 1, -1.0);
-        d.axis(7, 14, 0.7);
-        d.key(7, 19, true);
-        d.axis(7, 16, 0.0);
-        assert_eq!(d.state().left, [0.0, 1.0]);
-        assert_eq!(d.state().right, [0.0, -0.7]);
-        assert!(d.state().held(Button::DPadUp));
-        d.key(7, 19, false);
-        assert!(!d.state().held(Button::DPadUp));
-        d.axis(7, 15, 1.0);
-        assert!(d.state().held(Button::DPadRight));
-    }
-    #[test]
-    fn a_short_press_survives_until_one_poll_and_disconnect_clears_it() {
-        let mut d = Devices::default();
-        d.key(4, 96, true);
-        assert_eq!(d.active_id(), Some(4));
-        d.key(4, 96, false);
-        assert!(d.poll().held(Button::South));
-        assert!(!d.poll().held(Button::South));
-        d.key(4, 96, true);
-        d.retain(&[]);
-        assert_eq!(d.active_id(), None);
-        assert_eq!(d.poll(), PadState::default());
-    }
-    #[test]
-    fn triggers_accept_analog_and_digital_reports() {
-        let mut d = Devices::default();
-        d.key(3, 104, true);
-        d.axis(3, 17, 0.0);
-        assert!(d.state().held(Button::LeftTrigger));
-        assert_eq!(d.state().triggers[0], 1.0);
-        d.key(3, 104, false);
-        assert_eq!(d.state().triggers[0], 0.0);
-        d.axis(3, 23, 0.8);
-        assert_eq!(d.state().triggers[0], 0.8);
-        d.axis(3, 22, 0.6);
-        assert_eq!(d.state().triggers[1], 0.6);
-        assert!(!d.key(3, 24, true)); // Volume up is never a game action.
-    }
-    #[test]
-    fn digital_triggers_reach_edges_even_when_tapped_between_polls() {
-        let mut d = Devices::default();
-        let mut edges = crate::gamepad::Edges::default();
-        d.key(1, 105, true);
-        d.key(1, 105, false);
-        assert_eq!(edges.update(&d.poll(), 0.4), [(Button::RightTrigger, true)]);
-        assert_eq!(
-            edges.update(&d.poll(), 0.4),
-            [(Button::RightTrigger, false)]
-        );
-    }
-    #[test]
-    fn drift_neutral_and_repeats_do_not_select_another_controller() {
-        let mut d = Devices::default();
-        assert!(!d.axis(1, 0, 0.12));
-        assert_eq!(d.state(), PadState::default());
-        assert!(d.key(2, 96, true));
-        assert!(!d.key(2, 96, true));
-        d.axis(1, 0, 0.0);
-        assert!(d.state().held(Button::South));
-        d.retain(&[1]);
-        assert_eq!(d.state(), PadState::default());
-        d.axis(1, 0, f64::NAN);
-        assert_eq!(d.state(), PadState::default());
-        assert!(!d.axis(1, 9, 1.0)); // An axis no controller stick uses.
-    }
-    #[test]
-    fn picked_modes_reject_other_devices_and_auto_follows_activity() {
-        let mut s = Selection::default();
-        assert_eq!((s.mode(), s.active()), (InputMode::Auto, InputMode::Touch));
-        assert!(s.configure(InputMode::Touch));
-        assert!(!s.configure(InputMode::Touch));
-        assert!(!s.note(InputMode::Controller));
-        assert_eq!(s.active(), InputMode::Touch);
-        assert!(s.configure(InputMode::Controller));
-        assert_eq!(s.active(), InputMode::Controller);
-        assert!(!s.note(InputMode::Touch));
-        assert!(s.configure(InputMode::Auto));
-        assert_eq!(s.active(), InputMode::Touch);
-        assert!(s.note(InputMode::KeyboardMouse));
-        assert_eq!(s.active(), InputMode::KeyboardMouse);
-        assert!(s.note(InputMode::Controller));
-        assert_eq!(s.active(), InputMode::Controller);
-        assert!(!s.note(InputMode::Auto));
-        assert_eq!(s.active(), InputMode::Controller);
-    }
-    #[test]
-    fn input_modes_save_by_name() {
-        let names: Vec<_> = InputMode::ALL
-            .iter()
-            .map(|m| serde_json::to_string(m).unwrap())
-            .collect();
-        assert_eq!(
-            names,
-            [
-                "\"auto\"",
-                "\"touch\"",
-                "\"keyboard-mouse\"",
-                "\"controller\""
-            ]
-        );
-        assert!(InputMode::ALL.iter().all(|m| !m.label().is_empty()));
-    }
-}
+mod tests;
