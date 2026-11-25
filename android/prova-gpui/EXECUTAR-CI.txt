@@ -1,1 +1,1 @@
-Execução solicitada por Mikael em 2026-11-24. Este APK é uma prova GPUI Android e não é o launcher nem o jogo.
+Nova execução solicitada por Mikael, após correção do empacotamento. Esta é uma prova GPUI Android, não o launcher nem o jogo.

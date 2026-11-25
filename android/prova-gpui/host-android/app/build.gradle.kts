@@ -15,5 +15,11 @@ android {
     sourceSets["main"].java.srcDir(gpuiAndroidSrc)
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
-    packaging { jniLibs.useLegacyPackaging = false }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+            // Evita que o AGP modifique a biblioteca antes da checagem de SHA-256.
+            keepDebugSymbols += "**/libhorizon_gpui_prova.so"
+        }
+    }
 }
